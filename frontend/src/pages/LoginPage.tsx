@@ -2,10 +2,11 @@ import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { ApiError } from "../api/client";
+import { isMockingEnabled } from "../api/mocks/enableMocking";
 import "./LoginPage.css";
 
 export function LoginPage() {
-  const { isAuthenticated, isLoading, loginWithGithub } = useAuth();
+  const { isAuthenticated, isLoading, loginWithGithub, handleGithubCallback } = useAuth();
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,6 +22,18 @@ export function LoginPage() {
     } catch (err) {
       setIsRedirecting(false);
       setError(err instanceof ApiError ? err.message : "로그인을 시작할 수 없습니다. 잠시 후 다시 시도해주세요.");
+    }
+  }
+
+  // 실제 GitHub OAuth App이 없어도 mock 콜백으로 바로 로그인해 화면을 테스트할 수 있습니다.
+  async function handleTestLoginClick() {
+    setError(null);
+    setIsRedirecting(true);
+    try {
+      await handleGithubCallback("mock-code");
+    } catch (err) {
+      setIsRedirecting(false);
+      setError(err instanceof ApiError ? err.message : "테스트 로그인에 실패했습니다.");
     }
   }
 
@@ -40,6 +53,17 @@ export function LoginPage() {
           <GithubMark />
           {isRedirecting ? "GitHub로 이동 중..." : "GitHub로 로그인"}
         </button>
+        {isMockingEnabled() && (
+          <button
+            type="button"
+            className="github-login-button"
+            style={{ background: "none", color: "var(--text-h)" }}
+            onClick={handleTestLoginClick}
+            disabled={isRedirecting || isLoading}
+          >
+            테스트 계정으로 로그인 (mock)
+          </button>
+        )}
         {error && <p className="login-error">{error}</p>}
       </div>
     </section>
