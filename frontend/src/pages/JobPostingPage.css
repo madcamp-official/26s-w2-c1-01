@@ -1,0 +1,128 @@
+.job-posting-page {
+  flex-grow: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.job-posting-card {
+  max-width: 560px;
+  width: 100%;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  align-items: center;
+}
+
+.job-posting-card h1 {
+  font-size: 32px;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.job-posting-description {
+  color: var(--text);
+  font-size: 16px;
+  line-height: 150%;
+}
+
+.job-posting-tabs {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  box-sizing: border-box;
+}
+
+.job-posting-tabs button {
+  flex: 1;
+  border: none;
+  background: none;
+  color: var(--text);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.job-posting-tabs button.active {
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.job-posting-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.job-posting-form input,
+.job-posting-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  resize: vertical;
+}
+
+.job-posting-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 24px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--text-h);
+  color: var(--bg);
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    opacity 0.2s,
+    box-shadow 0.2s;
+}
+
+.job-posting-button:hover:not(:disabled) {
+  box-shadow: var(--shadow);
+}
+
+.job-posting-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.job-posting-error {
+  width: 100%;
+  box-sizing: border-box;
+  color: #e5484d;
+  font-size: 14px;
+  text-align: left;
+  margin: 0;
+}
+
+.job-posting-raw-text {
+  width: 100%;
+  box-sizing: border-box;
+  max-height: 300px;
+  overflow-y: auto;
+  text-align: left;
+  white-space: pre-wrap;
+  background: var(--code-bg);
+  border-radius: 8px;
+  padding: 16px;
+  font-size: 14px;
+  color: var(--text-h);
+  margin: 0;
+}

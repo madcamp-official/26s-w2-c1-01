@@ -12,6 +12,7 @@ export function DashboardPage() {
       <div style={{ display: "flex", gap: "12px", justifyContent: "center", margin: "16px 0" }}>
         <Link to="/collect">GitHub 프로젝트 수집</Link>
         <Link to="/projects">내 프로젝트</Link>
+        <Link to="/job-posting">채용공고 등록</Link>
       </div>
       <button type="button" onClick={logout}>
         로그아웃

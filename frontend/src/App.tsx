@@ -4,6 +4,7 @@ import { AuthCallbackPage } from "./pages/AuthCallbackPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { CollectionConsentPage } from "./pages/CollectionConsentPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
+import { JobPostingPage } from "./pages/JobPostingPage";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 function App() {
@@ -32,6 +33,14 @@ function App() {
         element={
           <ProtectedRoute>
             <ProjectsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/job-posting"
+        element={
+          <ProtectedRoute>
+            <JobPostingPage />
           </ProtectedRoute>
         }
       />
