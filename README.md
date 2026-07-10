@@ -20,10 +20,12 @@
 
 ## 팀원
 
-| 이름 | 학교 | GitHub | 역할 |
-|---|---|---|---|
-| 김태현 |KAIST|terry2549|벡엔드|
-| 유나연 |고려대학교|yxxnxyxxn|프론트엔드|
+| <img src="https://github.com/terry2549.png" width="120" /> | <img src="https://github.com/yxxnxyxxn.png" width="120" /> |
+|---|---|
+| **김태현** | **유나연** |
+| KAIST | 고려대학교 |
+| [terry2549](https://github.com/terry2549) | [yxxnxyxxn](https://github.com/yxxnxyxxn) |
+| 벡엔드 | 프론트엔드 |
 
 ---
 
