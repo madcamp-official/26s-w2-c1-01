@@ -1,8 +1,9 @@
 import { useCallback, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useJobPolling } from "../hooks/useJobPolling";
 import { getAnalysisJob, startJobPostingAnalysis } from "../api/analysis";
+import { startResumeGeneration } from "../api/resume";
 import { ApiError } from "../api/client";
 import type { AnalysisJobResponse } from "../types/analysis";
 import "./JobPostingAnalysisPage.css";
@@ -12,10 +13,14 @@ const RECOMMENDATION_LIMIT_OPTIONS = [3, 5];
 export function JobPostingAnalysisPage() {
   const { jobPostingId } = useParams<{ jobPostingId: string }>();
   const { accessToken } = useAuth();
+  const navigate = useNavigate();
   const [recommendationLimit, setRecommendationLimit] = useState(3);
   const [jobId, setJobId] = useState<number | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
+  const [selectedProjectIds, setSelectedProjectIds] = useState<number[]>([]);
+  const [resumeError, setResumeError] = useState<string | null>(null);
+  const [isGeneratingResume, setIsGeneratingResume] = useState(false);
 
   const poll = useCallback(() => {
     return getAnalysisJob(accessToken!, jobId!);
@@ -40,6 +45,25 @@ export function JobPostingAnalysisPage() {
   function handleRetry() {
     setJobId(null);
     setStartError(null);
+  }
+
+  function toggleProjectSelection(projectId: number) {
+    setSelectedProjectIds((prev) =>
+      prev.includes(projectId) ? prev.filter((id) => id !== projectId) : [...prev, projectId],
+    );
+  }
+
+  async function handleGenerateResume() {
+    if (!accessToken || !jobPostingId || selectedProjectIds.length === 0) return;
+    setResumeError(null);
+    setIsGeneratingResume(true);
+    try {
+      const res = await startResumeGeneration(accessToken, Number(jobPostingId), selectedProjectIds);
+      navigate(`/resume-jobs/${res.jobId}`);
+    } catch (err) {
+      setResumeError(err instanceof ApiError ? err.message : "이력서 생성을 시작하지 못했습니다.");
+      setIsGeneratingResume(false);
+    }
   }
 
   const isRunning = jobId !== null && job?.status !== "completed" && job?.status !== "failed";
@@ -138,6 +162,13 @@ export function JobPostingAnalysisPage() {
                 .map((project, index) => (
                   <article key={project.projectId} className="recommended-card">
                     <header className="recommended-card-header">
+                      <label className="recommended-select">
+                        <input
+                          type="checkbox"
+                          checked={selectedProjectIds.includes(project.projectId)}
+                          onChange={() => toggleProjectSelection(project.projectId)}
+                        />
+                      </label>
                       <span className="recommended-rank">{index + 1}위</span>
                       <h3>{project.title}</h3>
                       <span className="recommended-score">{project.score}점</span>
@@ -167,6 +198,20 @@ export function JobPostingAnalysisPage() {
                     )}
                   </article>
                 ))}
+            </div>
+
+            <div className="analysis-generate-row">
+              <button
+                type="button"
+                className="analysis-button"
+                onClick={handleGenerateResume}
+                disabled={selectedProjectIds.length === 0 || isGeneratingResume}
+              >
+                {isGeneratingResume
+                  ? "이력서 생성 시작하는 중..."
+                  : `선택한 ${selectedProjectIds.length}개 프로젝트로 이력서 초안 생성`}
+              </button>
+              {resumeError && <p className="analysis-error">{resumeError}</p>}
             </div>
           </div>
         )}

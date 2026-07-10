@@ -6,6 +6,8 @@ import { CollectionConsentPage } from "./pages/CollectionConsentPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { JobPostingPage } from "./pages/JobPostingPage";
 import { JobPostingAnalysisPage } from "./pages/JobPostingAnalysisPage";
+import { ResumeJobPage } from "./pages/ResumeJobPage";
+import { ResumeResultPage } from "./pages/ResumeResultPage";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 function App() {
@@ -50,6 +52,22 @@ function App() {
         element={
           <ProtectedRoute>
             <JobPostingAnalysisPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/resume-jobs/:jobId"
+        element={
+          <ProtectedRoute>
+            <ResumeJobPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/resume-results/:resumeResultId"
+        element={
+          <ProtectedRoute>
+            <ResumeResultPage />
           </ProtectedRoute>
         }
       />

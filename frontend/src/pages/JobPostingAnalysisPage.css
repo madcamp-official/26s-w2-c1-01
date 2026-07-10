@@ -215,3 +215,22 @@
   color: var(--text);
   margin: 0;
 }
+
+.recommended-select {
+  display: flex;
+  align-items: center;
+}
+
+.recommended-select input {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.analysis-generate-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
