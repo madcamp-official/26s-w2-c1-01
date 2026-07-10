@@ -16,6 +16,12 @@
   align-items: center;
 }
 
+.login-card h1 {
+  font-size: 32px;
+  line-height: 1.35;
+  margin: 0;
+}
+
 .login-description {
   color: var(--text);
   font-size: 16px;
