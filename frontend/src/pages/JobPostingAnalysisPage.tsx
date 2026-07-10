@@ -4,7 +4,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useJobPolling } from "../hooks/useJobPolling";
 import { getAnalysisJob, startJobPostingAnalysis } from "../api/analysis";
 import { startResumeGeneration } from "../api/resume";
-import { ApiError } from "../api/client";
+import { getErrorMessage } from "../api/client";
 import { EvidenceModal } from "../components/EvidenceModal";
 import type { AnalysisJobResponse } from "../types/analysis";
 import "./JobPostingAnalysisPage.css";
@@ -38,7 +38,7 @@ export function JobPostingAnalysisPage() {
       const res = await startJobPostingAnalysis(accessToken, Number(jobPostingId), recommendationLimit);
       setJobId(res.jobId);
     } catch (err) {
-      setStartError(err instanceof ApiError ? err.message : "분석을 시작하지 못했습니다.");
+      setStartError(getErrorMessage(err, "분석을 시작하지 못했습니다."));
     } finally {
       setIsStarting(false);
     }
@@ -63,7 +63,7 @@ export function JobPostingAnalysisPage() {
       const res = await startResumeGeneration(accessToken, Number(jobPostingId), selectedProjectIds);
       navigate(`/resume-jobs/${res.jobId}`);
     } catch (err) {
-      setResumeError(err instanceof ApiError ? err.message : "이력서 생성을 시작하지 못했습니다.");
+      setResumeError(getErrorMessage(err, "이력서 생성을 시작하지 못했습니다."));
       setIsGeneratingResume(false);
     }
   }
@@ -93,7 +93,7 @@ export function JobPostingAnalysisPage() {
                 ))}
               </select>
             </label>
-            <button type="button" className="analysis-button" onClick={handleStart} disabled={isStarting}>
+            <button type="button" className="btn-primary" onClick={handleStart} disabled={isStarting}>
               {isStarting ? "분석 시작하는 중..." : "공고 분석 시작"}
             </button>
             {startError && <p className="analysis-error">{startError}</p>}
@@ -110,7 +110,7 @@ export function JobPostingAnalysisPage() {
         {job?.status === "failed" && (
           <div className="analysis-progress">
             <p className="analysis-error">{job.error?.detail ?? pollError ?? "분석 중 오류가 발생했습니다."}</p>
-            <button type="button" className="analysis-button" onClick={handleRetry}>
+            <button type="button" className="btn-primary" onClick={handleRetry}>
               다시 시도하기
             </button>
           </div>
@@ -214,7 +214,7 @@ export function JobPostingAnalysisPage() {
             <div className="analysis-generate-row">
               <button
                 type="button"
-                className="analysis-button"
+                className="btn-primary"
                 onClick={handleGenerateResume}
                 disabled={selectedProjectIds.length === 0 || isGeneratingResume}
               >

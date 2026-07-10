@@ -3,7 +3,7 @@ import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { createJobPosting } from "../api/jobPostings";
-import { ApiError } from "../api/client";
+import { ApiError, getErrorMessage } from "../api/client";
 import type { JobPosting, JobPostingInputType } from "../types/jobPosting";
 import "./JobPostingPage.css";
 
@@ -32,10 +32,8 @@ export function JobPostingPage() {
       if (err instanceof ApiError && err.code === "JOB_POSTING_URL_FETCH_FAILED") {
         // URL 인식에 실패하면 텍스트 입력 탭으로 전환해 폴백을 안내합니다.
         setInputType("text");
-        setError(err.message);
-      } else {
-        setError(err instanceof ApiError ? err.message : "채용공고를 등록하지 못했습니다.");
       }
+      setError(getErrorMessage(err, "채용공고를 등록하지 못했습니다."));
     } finally {
       setIsSubmitting(false);
     }
@@ -55,10 +53,10 @@ export function JobPostingPage() {
           <h1>채용공고 등록 완료</h1>
           <p className="job-posting-description">아래 내용을 기반으로 공고 분석을 진행할 수 있습니다.</p>
           <pre className="job-posting-raw-text">{result.rawText}</pre>
-          <Link className="job-posting-button" to={`/job-postings/${result.jobPostingId}/analysis`}>
+          <Link className="btn-primary" to={`/job-postings/${result.jobPostingId}/analysis`}>
             공고 분석하러 가기
           </Link>
-          <button type="button" className="job-posting-button-secondary" onClick={handleReset}>
+          <button type="button" className="btn-secondary" onClick={handleReset}>
             다른 공고 등록하기
           </button>
         </div>
@@ -114,7 +112,7 @@ export function JobPostingPage() {
             />
           )}
           {error && <p className="job-posting-error">{error}</p>}
-          <button type="submit" className="job-posting-button" disabled={isSubmitting}>
+          <button type="submit" className="btn-primary" disabled={isSubmitting}>
             {isSubmitting ? "등록하는 중..." : "채용공고 등록"}
           </button>
         </form>

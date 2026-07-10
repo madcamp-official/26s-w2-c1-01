@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { ApiError } from "../api/client";
+import { getErrorMessage } from "../api/client";
 import "./LoginPage.css";
 
 export function AuthCallbackPage() {
@@ -26,7 +26,7 @@ export function AuthCallbackPage() {
       .then(() => setStatus("success"))
       .catch((err) => {
         setStatus("error");
-        setError(err instanceof ApiError ? err.message : "로그인 처리 중 오류가 발생했습니다.");
+        setError(getErrorMessage(err, "로그인 처리 중 오류가 발생했습니다."));
       });
   }, [searchParams, handleGithubCallback]);
 
@@ -41,7 +41,7 @@ export function AuthCallbackPage() {
         {status === "error" && (
           <>
             <p className="login-error">{error}</p>
-            <a className="github-login-button" href="/login">
+            <a className="btn-primary" href="/login">
               로그인 화면으로 돌아가기
             </a>
           </>

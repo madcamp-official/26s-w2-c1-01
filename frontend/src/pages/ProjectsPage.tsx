@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { fetchProjects, updateProject } from "../api/projects";
-import { ApiError } from "../api/client";
+import { getErrorMessage } from "../api/client";
 import type { Project, ProjectUpdateInput } from "../types/project";
 import "./ProjectsPage.css";
 
@@ -17,7 +17,7 @@ export function ProjectsPage() {
       const res = await fetchProjects(accessToken);
       setProjects(res.projects);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "프로젝트를 불러오지 못했습니다.");
+      setError(getErrorMessage(err, "프로젝트를 불러오지 못했습니다."));
     }
   }, [accessToken]);
 
@@ -99,7 +99,7 @@ function ProjectCard({
       onUpdated({ ...project, ...updated });
       setIsEditing(false);
     } catch (err) {
-      setSaveError(err instanceof ApiError ? err.message : "저장하지 못했습니다.");
+      setSaveError(getErrorMessage(err, "저장하지 못했습니다."));
     } finally {
       setIsSaving(false);
     }

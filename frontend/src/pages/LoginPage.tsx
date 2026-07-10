@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { ApiError } from "../api/client";
+import { getErrorMessage } from "../api/client";
 import { isMockingEnabled } from "../api/mocks/enableMocking";
 import "./LoginPage.css";
 
@@ -21,7 +21,7 @@ export function LoginPage() {
       await loginWithGithub();
     } catch (err) {
       setIsRedirecting(false);
-      setError(err instanceof ApiError ? err.message : "로그인을 시작할 수 없습니다. 잠시 후 다시 시도해주세요.");
+      setError(getErrorMessage(err, "로그인을 시작할 수 없습니다. 잠시 후 다시 시도해주세요."));
     }
   }
 
@@ -33,7 +33,7 @@ export function LoginPage() {
       await handleGithubCallback("mock-code");
     } catch (err) {
       setIsRedirecting(false);
-      setError(err instanceof ApiError ? err.message : "테스트 로그인에 실패했습니다.");
+      setError(getErrorMessage(err, "테스트 로그인에 실패했습니다."));
     }
   }
 
@@ -44,20 +44,14 @@ export function LoginPage() {
         <p className="login-description">
           GitHub 계정으로 로그인하면 프로젝트를 자동으로 수집하고, 채용공고에 맞는 이력서 내용을 추천해드립니다.
         </p>
-        <button
-          type="button"
-          className="github-login-button"
-          onClick={handleLoginClick}
-          disabled={isRedirecting || isLoading}
-        >
+        <button type="button" className="btn-primary" onClick={handleLoginClick} disabled={isRedirecting || isLoading}>
           <GithubMark />
           {isRedirecting ? "GitHub로 이동 중..." : "GitHub로 로그인"}
         </button>
         {isMockingEnabled() && (
           <button
             type="button"
-            className="github-login-button"
-            style={{ background: "none", color: "var(--text-h)" }}
+            className="btn-secondary"
             onClick={handleTestLoginClick}
             disabled={isRedirecting || isLoading}
           >

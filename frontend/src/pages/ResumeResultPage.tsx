@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { getResumeResult } from "../api/resume";
-import { ApiError } from "../api/client";
+import { getErrorMessage } from "../api/client";
 import { EvidenceModal } from "../components/EvidenceModal";
 import type { ResumeResult } from "../types/resume";
 import "./ResumeResultPage.css";
@@ -22,7 +22,7 @@ export function ResumeResultPage() {
         if (!cancelled) setResult(res);
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof ApiError ? err.message : "이력서 결과를 불러오지 못했습니다.");
+        if (!cancelled) setError(getErrorMessage(err, "이력서 결과를 불러오지 못했습니다."));
       });
     return () => {
       cancelled = true;
@@ -80,9 +80,9 @@ export function ResumeResultPage() {
         {result.missingSkills.length > 0 && (
           <div className="resume-missing-skills">
             <h2>부족한 역량</h2>
-            <div className="resume-tag-list">
+            <div className="tag-list">
               {result.missingSkills.map((skill) => (
-                <span key={skill} className="resume-tag resume-tag-missing">
+                <span key={skill} className="tag tag-missing">
                   {skill}
                 </span>
               ))}
@@ -98,9 +98,9 @@ export function ResumeResultPage() {
                 <article key={project.title} className="suggested-project-card">
                   <h3>{project.title}</h3>
                   <p>{project.description}</p>
-                  <div className="resume-tag-list">
+                  <div className="tag-list">
                     {project.targetSkills.map((skill) => (
-                      <span key={skill} className="resume-tag">
+                      <span key={skill} className="tag">
                         {skill}
                       </span>
                     ))}

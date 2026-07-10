@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useJobPolling } from "../hooks/useJobPolling";
 import { getGithubCollectionJob, startGithubCollection } from "../api/github";
-import { ApiError } from "../api/client";
+import { getErrorMessage } from "../api/client";
 import type { JobResponse } from "../types/job";
 import "./CollectionConsentPage.css";
 
@@ -29,7 +29,7 @@ export function CollectionConsentPage() {
       const res = await startGithubCollection(accessToken, true);
       setJobId(res.jobId);
     } catch (err) {
-      setStartError(err instanceof ApiError ? err.message : "수집을 시작하지 못했습니다.");
+      setStartError(getErrorMessage(err, "수집을 시작하지 못했습니다."));
     } finally {
       setIsStarting(false);
     }
@@ -57,7 +57,7 @@ export function CollectionConsentPage() {
               <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
               GitHub 프로젝트 및 README 데이터를 분석하는 데 동의합니다.
             </label>
-            <button type="button" className="consent-button" onClick={handleStart} disabled={!agreed || isStarting}>
+            <button type="button" className="btn-primary" onClick={handleStart} disabled={!agreed || isStarting}>
               {isStarting ? "시작하는 중..." : "GitHub 프로젝트 수집 시작"}
             </button>
             {startError && <p className="consent-error">{startError}</p>}
@@ -74,7 +74,7 @@ export function CollectionConsentPage() {
         {job?.status === "completed" && (
           <div className="consent-progress">
             <p>{job.message}</p>
-            <button type="button" className="consent-button" onClick={() => navigate("/projects")}>
+            <button type="button" className="btn-primary" onClick={() => navigate("/projects")}>
               프로젝트 목록 보기
             </button>
           </div>
@@ -83,7 +83,7 @@ export function CollectionConsentPage() {
         {(job?.status === "failed" || pollError) && (
           <div className="consent-progress">
             <p className="consent-error">{job?.error?.detail ?? pollError ?? "수집 중 오류가 발생했습니다."}</p>
-            <button type="button" className="consent-button" onClick={handleRetry}>
+            <button type="button" className="btn-primary" onClick={handleRetry}>
               다시 시도하기
             </button>
           </div>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ApiError } from "../api/client";
+import { getErrorMessage } from "../api/client";
 import type { JobStatus } from "../types/job";
 
 // GitHub 수집 / 공고 분석 / 이력서 생성 작업이 공유하는 폴링 패턴.
@@ -33,7 +33,7 @@ export function useJobPolling<T extends { status: JobStatus }>(
         }
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof ApiError ? err.message : "작업 상태를 확인하지 못했습니다.");
+        setError(getErrorMessage(err, "작업 상태를 확인하지 못했습니다."));
       }
     }
 

@@ -29,21 +29,6 @@
   gap: 16px;
 }
 
-.spinner {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 3px solid var(--border);
-  border-top-color: var(--accent);
-  animation: resume-job-spin 0.8s linear infinite;
-}
-
-@keyframes resume-job-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .resume-job-error {
   color: #e5484d;
   font-size: 14px;

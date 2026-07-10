@@ -76,51 +76,6 @@
   resize: vertical;
 }
 
-.job-posting-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 12px 24px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--text-h);
-  color: var(--bg);
-  font-size: 16px;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    opacity 0.2s,
-    box-shadow 0.2s;
-}
-
-.job-posting-button:hover:not(:disabled) {
-  box-shadow: var(--shadow);
-}
-
-.job-posting-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.job-posting-button-secondary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 12px 24px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: none;
-  color: var(--text-h);
-  font-size: 15px;
-  cursor: pointer;
-}
-
-.job-posting-button-secondary:hover {
-  box-shadow: var(--shadow);
-}
-
 .job-posting-error {
   width: 100%;
   box-sizing: border-box;
