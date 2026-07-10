@@ -12,6 +12,8 @@ __pycache__/
 .env.*
 backend/.env
 backend/.env.*
+!.env.example
+!backend/.env.example
 
 # Test and tool caches
 .pytest_cache/
