@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { getResumeResult } from "../api/resume";
 import { ApiError } from "../api/client";
+import { EvidenceModal } from "../components/EvidenceModal";
 import type { ResumeResult } from "../types/resume";
 import "./ResumeResultPage.css";
 
@@ -11,6 +12,7 @@ export function ResumeResultPage() {
   const { accessToken } = useAuth();
   const [result, setResult] = useState<ResumeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [openEvidenceIds, setOpenEvidenceIds] = useState<number[] | null>(null);
 
   useEffect(() => {
     if (!accessToken || !resumeResultId) return;
@@ -62,6 +64,15 @@ export function ResumeResultPage() {
             <article key={`${section.sectionType}-${index}`} className="resume-section-card">
               <h2>{section.heading}</h2>
               <p>{section.content}</p>
+              {section.evidenceIds.length > 0 && (
+                <button
+                  type="button"
+                  className="evidence-view-button"
+                  onClick={() => setOpenEvidenceIds(section.evidenceIds)}
+                >
+                  근거 보기
+                </button>
+              )}
             </article>
           ))}
         </div>
@@ -102,6 +113,9 @@ export function ResumeResultPage() {
           </div>
         )}
       </div>
+      {openEvidenceIds && (
+        <EvidenceModal evidenceIds={openEvidenceIds} onClose={() => setOpenEvidenceIds(null)} />
+      )}
     </section>
   );
 }

@@ -5,6 +5,7 @@ import { useJobPolling } from "../hooks/useJobPolling";
 import { getAnalysisJob, startJobPostingAnalysis } from "../api/analysis";
 import { startResumeGeneration } from "../api/resume";
 import { ApiError } from "../api/client";
+import { EvidenceModal } from "../components/EvidenceModal";
 import type { AnalysisJobResponse } from "../types/analysis";
 import "./JobPostingAnalysisPage.css";
 
@@ -21,6 +22,7 @@ export function JobPostingAnalysisPage() {
   const [selectedProjectIds, setSelectedProjectIds] = useState<number[]>([]);
   const [resumeError, setResumeError] = useState<string | null>(null);
   const [isGeneratingResume, setIsGeneratingResume] = useState(false);
+  const [openEvidenceIds, setOpenEvidenceIds] = useState<number[] | null>(null);
 
   const poll = useCallback(() => {
     return getAnalysisJob(accessToken!, jobId!);
@@ -196,6 +198,15 @@ export function JobPostingAnalysisPage() {
                         </div>
                       </div>
                     )}
+                    {project.evidenceIds.length > 0 && (
+                      <button
+                        type="button"
+                        className="evidence-view-button"
+                        onClick={() => setOpenEvidenceIds(project.evidenceIds)}
+                      >
+                        근거 보기
+                      </button>
+                    )}
                   </article>
                 ))}
             </div>
@@ -216,6 +227,9 @@ export function JobPostingAnalysisPage() {
           </div>
         )}
       </div>
+      {openEvidenceIds && (
+        <EvidenceModal evidenceIds={openEvidenceIds} onClose={() => setOpenEvidenceIds(null)} />
+      )}
     </section>
   );
 }

@@ -59,6 +59,9 @@
   border-radius: 12px;
   padding: 20px;
   background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .resume-section-card h2 {
@@ -71,6 +74,21 @@
   font-size: 14px;
   color: var(--text-h);
   line-height: 150%;
+}
+
+.evidence-view-button {
+  align-self: flex-start;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  color: var(--accent);
+  padding: 4px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.evidence-view-button:hover {
+  box-shadow: var(--shadow);
 }
 
 .resume-missing-skills h2,

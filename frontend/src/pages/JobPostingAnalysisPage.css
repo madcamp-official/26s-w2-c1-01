@@ -234,3 +234,18 @@
   gap: 12px;
   margin-top: 8px;
 }
+
+.evidence-view-button {
+  align-self: flex-start;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  color: var(--accent);
+  padding: 4px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.evidence-view-button:hover {
+  box-shadow: var(--shadow);
+}
