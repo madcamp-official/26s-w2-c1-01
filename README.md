@@ -22,15 +22,15 @@
 
 | 이름 | 학교 | GitHub | 역할 |
 |---|---|---|---|
-| 김태현 |  |  |  |
-| 유나연 |  |  |  |
+| 김태현 |KAIST|terry2549|벡엔드|
+| 유나연 |고려대학교|yxxnxyxxn|프론트엔드|
 
 ---
 
 ## 선택 옵션
 
 - [ ] 실시간 인터랙션
-- [ ] LLM Wrapper
+- [x] LLM Wrapper
 - [ ] Cross-Platform
 
 ---
