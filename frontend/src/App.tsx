@@ -5,6 +5,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { CollectionConsentPage } from "./pages/CollectionConsentPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { JobPostingPage } from "./pages/JobPostingPage";
+import { JobPostingAnalysisPage } from "./pages/JobPostingAnalysisPage";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 function App() {
@@ -41,6 +42,14 @@ function App() {
         element={
           <ProtectedRoute>
             <JobPostingPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/job-postings/:jobPostingId/analysis"
+        element={
+          <ProtectedRoute>
+            <JobPostingAnalysisPage />
           </ProtectedRoute>
         }
       />

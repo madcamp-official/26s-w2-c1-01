@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { createJobPosting } from "../api/jobPostings";
 import { ApiError } from "../api/client";
@@ -54,7 +55,10 @@ export function JobPostingPage() {
           <h1>채용공고 등록 완료</h1>
           <p className="job-posting-description">아래 내용을 기반으로 공고 분석을 진행할 수 있습니다.</p>
           <pre className="job-posting-raw-text">{result.rawText}</pre>
-          <button type="button" className="job-posting-button" onClick={handleReset}>
+          <Link className="job-posting-button" to={`/job-postings/${result.jobPostingId}/analysis`}>
+            공고 분석하러 가기
+          </Link>
+          <button type="button" className="job-posting-button-secondary" onClick={handleReset}>
             다른 공고 등록하기
           </button>
         </div>
