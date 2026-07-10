@@ -240,3 +240,11 @@ npm run dev   # 또는 python main.py 등
 - https://reactnative.dev/
 - https://docs.expo.dev/
 - https://kotlinlang.org/multiplatform/
+
+# docs
+
+공동 설계 문서 (API 명세, 데이터 스키마 등). README.md의 "설계 문서" 섹션과 함께 최신 상태로 유지하세요.
+
+- `api-spec.md` — API 요청/응답 명세 (프론트-백엔드 공동 정의)
+- `data-schema.md` — 채용공고/프로젝트/매칭 결과 등 데이터 구조 정의
+
