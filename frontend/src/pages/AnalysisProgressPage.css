@@ -1,0 +1,94 @@
+.progress-status-pill {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 800;
+  border-radius: var(--radius-pill);
+  padding: 5px 13px;
+  background: var(--neutral-tint);
+  color: var(--ink-sub);
+}
+.progress-status-pill--running {
+  background: var(--primary-tint);
+  color: var(--primary);
+}
+.progress-status-pill--completed {
+  background: var(--primary);
+  color: #fff;
+}
+.progress-status-pill--failed {
+  background: var(--accent-tint);
+  color: var(--accent-ink);
+}
+
+.progress-step-counter {
+  margin: 18px 0 6px;
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+.progress-step-counter__total {
+  font-size: 20px;
+  opacity: 0.6;
+}
+
+.progress-step-label {
+  margin: 0 0 30px;
+  font-weight: 800;
+  font-size: 21px;
+  letter-spacing: -0.02em;
+  min-height: 1.4em;
+}
+
+.progress-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: left;
+}
+
+.progress-step-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.progress-step-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 99px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  background: var(--neutral-tint);
+  color: var(--ink-faint);
+  transition: var(--transition-dot);
+}
+.progress-step-dot--done {
+  background: var(--primary);
+  color: #fff;
+}
+.progress-step-dot--active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.progress-step-text {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink-faint);
+}
+.progress-step-text--active {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.progress-footnote {
+  margin: 24px 0 0;
+  font-size: 13px;
+  color: var(--ink-faint);
+}
