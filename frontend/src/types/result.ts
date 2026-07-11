@@ -1,7 +1,7 @@
 export interface SkillMatch {
   name: string;
   pct: number;
-  weak: boolean;
+  weak?: boolean;
 }
 
 export interface RankedProject {
@@ -18,7 +18,7 @@ export interface ResumeSentence {
   srcQuote: string;
 }
 
-export interface SkillGap {
+export interface GapProject {
   target: string;
   title: string;
   features: string;
@@ -27,11 +27,10 @@ export interface SkillGap {
 }
 
 export interface AnalysisResult {
-  id: string;
   jobTitle: string;
   matchScore: number;
   skills: SkillMatch[];
   rankedProjects: RankedProject[];
   sentences: ResumeSentence[];
-  gaps: SkillGap[];
+  gaps: GapProject[];
 }

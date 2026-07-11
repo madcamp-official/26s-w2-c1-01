@@ -1,6 +1,8 @@
 export interface User {
-  id: string;
+  id: number;
+  githubId: string;
   name: string;
-  email: string;
+  avatarUrl: string;
+  email?: string;
   headline?: string;
 }
