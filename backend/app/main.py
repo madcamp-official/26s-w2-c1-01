@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import projects, job_postings, analysis, resumes, auth
+from app.routers import projects, job_postings, analysis, resumes, auth, evidences, collection
+
+
 
 app = FastAPI()
 
@@ -20,6 +22,8 @@ app.include_router(job_postings.router)
 app.include_router(analysis.router)
 app.include_router(resumes.router)
 app.include_router(auth.router)
+app.include_router(evidences.router)
+app.include_router(collection.router)
 
 @app.get("/")
 def root():
