@@ -1,0 +1,114 @@
+.mypage-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 22px;
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 26px;
+  flex: none;
+}
+
+.mypage-profile-info {
+  flex: 1;
+  min-width: 180px;
+}
+.mypage-profile-name {
+  margin: 0 0 4px;
+  font-weight: 800;
+  font-size: 21px;
+  letter-spacing: -0.02em;
+}
+.mypage-profile-meta {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-sub);
+}
+
+.mypage-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.mypage-section-title {
+  margin: 0;
+  font-weight: 800;
+  font-size: 19px;
+  letter-spacing: -0.02em;
+}
+.mypage-add-link {
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mypage-add-link:hover {
+  color: var(--primary-hover);
+}
+
+.mypage-github-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+}
+.mypage-github-row__badge {
+  flex: none;
+  font-size: 12px;
+  font-weight: 800;
+  background: var(--primary-tint);
+  color: var(--primary);
+  border-radius: var(--radius-pill);
+  padding: 4px 11px;
+}
+.mypage-github-row__id {
+  flex: 1;
+  min-width: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mypage-github-row__status {
+  flex: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary);
+  white-space: nowrap;
+}
+
+.mypage-projects-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.mypage-projects-row__info {
+  flex: 1;
+  min-width: 200px;
+}
+.mypage-projects-row__desc {
+  margin: 3px 0 0;
+  font-size: 13.5px;
+  color: var(--ink-sub);
+}
+.mypage-projects-row__count {
+  color: var(--primary);
+}
+
+.mypage-logout {
+  text-align: center;
+  margin-top: 32px;
+}

@@ -1,13 +1,4 @@
-export interface User {
-  id: number;
-  githubId: string;
-  name: string;
-  avatarUrl: string;
-}
-
-export interface GithubLoginResponse {
-  redirectUrl: string;
-}
+import type { User } from "./user";
 
 export interface GithubCallbackResponse {
   accessToken: string;

@@ -1,0 +1,52 @@
+:root {
+  /* Colors */
+  --bg: #f5f2f2;
+  --surface: #ffffff;
+  --ink: #2b2a2a;
+  --ink-hover: #141313;
+  --ink-sub: #8b8887;
+  --ink-faint: #b5b0ae;
+  --primary: #5a7acd;
+  --primary-hover: #4666bd;
+  --primary-tint: #eef1fa;
+  --primary-tint-soft: #f7f9fe;
+  --accent: #feb05d;
+  --accent-tint: #ffe9cf;
+  --accent-ink: #c07920;
+  --border: #e8e4e3;
+  --border-dashed: #d8d3d1;
+  --border-accent-soft: #f4ddc0;
+  --neutral-tint: #f5f2f2;
+  --neutral-tint-hover: #ebe7e6;
+  --gap-target-ink: #b08b5c;
+  --gap-body-ink: #55504e;
+
+  /* Radius */
+  --radius-card: 24px;
+  --radius-card-lg: 28px;
+  --radius-md: 16px;
+  --radius-sm: 11px;
+  --radius-pill: 999px;
+  --radius-tag: 9px;
+
+  /* Shadow */
+  --shadow-card: 0 2px 12px rgba(43, 42, 42, 0.04);
+  --shadow-cta-primary: 0 8px 24px rgba(90, 122, 205, 0.35);
+  --shadow-cta-dark: 0 8px 24px rgba(43, 42, 42, 0.25);
+
+  /* Spacing */
+  --content-padding: 24px;
+  --card-padding: 32px;
+  --max-w-narrow: 520px;
+  --max-w-form: 760px;
+  --max-w-dashboard: 1040px;
+
+  /* Transitions */
+  --transition-fast: background 0.15s ease;
+  --transition-progress: width 0.1s linear;
+  --transition-dot: background 0.3s ease;
+  --transition-opacity: opacity 0.2s ease;
+
+  font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+}

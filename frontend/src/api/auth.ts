@@ -1,18 +1,40 @@
-import { apiRequest } from "./client";
-import type { GithubCallbackResponse, GithubLoginResponse, User } from "../types/auth";
+import type { User } from "../types/user";
+import type { GithubCallbackResponse } from "../types/auth";
+import { mockUser } from "../features/mock/mockData";
 
-// docs/api-spec.md 2. GitHub 로그인 시작
-export function getGithubLoginUrl() {
-  return apiRequest<GithubLoginResponse>("/auth/github/login");
+export interface LoginPayload {
+  email: string;
+  password: string;
 }
 
-// docs/api-spec.md 3. GitHub 로그인 콜백
-export function exchangeGithubCode(code: string) {
-  const params = new URLSearchParams({ code });
-  return apiRequest<GithubCallbackResponse>(`/auth/github/callback?${params.toString()}`);
+// api-spec.md #2 GET /auth/github/login
+export async function getGithubLoginUrl(): Promise<{ redirectUrl: string }> {
+  await new Promise((r) => setTimeout(r, 100));
+  return { redirectUrl: "https://github.com/login/oauth/authorize?client_id=TODO" };
 }
 
-// docs/api-spec.md 4. 내 정보 조회
-export function fetchMe(accessToken: string) {
-  return apiRequest<User>("/me", { accessToken });
+// api-spec.md #3 GET /auth/github/callback?code=...
+export async function exchangeGithubCode(_code: string): Promise<GithubCallbackResponse> {
+  await new Promise((r) => setTimeout(r, 300));
+  return { accessToken: "mock-access-token", user: mockUser };
+}
+
+// api-spec.md #4 GET /me
+export async function getMe(): Promise<User> {
+  await new Promise((r) => setTimeout(r, 200));
+  return mockUser;
+}
+
+export async function login(payload: LoginPayload): Promise<User> {
+  await new Promise((r) => setTimeout(r, 300));
+  return { ...mockUser, email: payload.email };
+}
+
+export async function loginWithProvider(_provider: "github" | "google"): Promise<User> {
+  await new Promise((r) => setTimeout(r, 300));
+  return mockUser;
+}
+
+export async function logout(): Promise<void> {
+  await new Promise((r) => setTimeout(r, 100));
 }

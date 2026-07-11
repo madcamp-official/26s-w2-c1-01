@@ -1,0 +1,47 @@
+.badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 800;
+  border-radius: var(--radius-pill);
+  padding: 4px 11px;
+}
+
+.badge--step {
+  color: #fff;
+  background: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.badge--source-github {
+  background: var(--primary-tint);
+  color: var(--primary);
+}
+.badge--source-notion {
+  background: var(--neutral-tint);
+  color: var(--gap-body-ink);
+}
+.badge--source-pdf {
+  background: var(--accent-tint);
+  color: var(--accent-ink);
+}
+
+.badge--excluded {
+  font-weight: 700;
+  color: var(--ink-sub);
+  background: var(--neutral-tint);
+}
+
+.badge--match-high {
+  color: var(--primary);
+  background: var(--primary-tint);
+}
+.badge--match-low {
+  color: var(--accent-ink);
+  background: var(--accent-tint);
+}
+
+.badge--gap {
+  color: var(--ink);
+  background: var(--accent-tint);
+}

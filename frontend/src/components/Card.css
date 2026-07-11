@@ -1,0 +1,15 @@
+.card {
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  padding: var(--card-padding);
+  box-shadow: var(--shadow-card);
+}
+
+.card--dark {
+  background: var(--ink);
+  color: #fff;
+}
+
+.card--large {
+  border-radius: var(--radius-card-lg);
+}

@@ -1,24 +1,22 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
+import { MainPage } from "./pages/MainPage";
 import { LoginPage } from "./pages/LoginPage";
-import { AuthCallbackPage } from "./pages/AuthCallbackPage";
-import { DashboardPage } from "./pages/DashboardPage";
-import { ProtectedRoute } from "./components/ProtectedRoute";
+import { MyPage } from "./pages/MyPage";
+import { InputUploadPage } from "./pages/InputUploadPage";
+import { ProjectEditPage } from "./pages/ProjectEditPage";
+import { AnalysisProgressPage } from "./pages/AnalysisProgressPage";
+import { RecommendationResultPage } from "./pages/RecommendationResultPage";
 
 function App() {
   return (
     <Routes>
+      <Route path="/" element={<MainPage />} />
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/auth/github/callback" element={<AuthCallbackPage />} />
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <DashboardPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/my" element={<MyPage />} />
+      <Route path="/analyze" element={<InputUploadPage />} />
+      <Route path="/projects" element={<ProjectEditPage />} />
+      <Route path="/progress" element={<AnalysisProgressPage />} />
+      <Route path="/result/:id" element={<RecommendationResultPage />} />
     </Routes>
   );
 }

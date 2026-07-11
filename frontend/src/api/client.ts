@@ -1,61 +1,44 @@
-// docs/api-spec.md 의 Base URL은 8000이지만, 현재 mock 서버(src/api/mocks/handlers.ts)는
-// 8080을 사용하고 있어 개발 중에는 8080을 기본값으로 둡니다.
-// 실제 백엔드 주소가 정해지면 .env 의 VITE_API_BASE_URL 로 덮어쓰세요.
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
-
-export interface ApiErrorBody {
-  status: "failed";
-  message: string;
-  error: {
-    code: string;
-    detail: string;
-  };
-}
+// api-spec.md #Base URL — 개발 환경 기본값
+// TODO: import.meta.env.VITE_API_BASE_URL 로 교체
+export const API_BASE_URL = "http://localhost:8000";
 
 export class ApiError extends Error {
-  code: string;
-  detail: string;
   status: number;
+  code?: string;
 
-  constructor(status: number, body: ApiErrorBody) {
-    super(body.message);
+  constructor(message: string, status: number, code?: string) {
+    super(message);
     this.name = "ApiError";
     this.status = status;
-    this.code = body.error.code;
-    this.detail = body.error.detail;
+    this.code = code;
   }
 }
 
-interface RequestOptions extends Omit<RequestInit, "body"> {
-  body?: unknown;
-  accessToken?: string | null;
+// TODO: 새로고침 후에도 유지되도록 localStorage에 영속화
+let accessToken: string | null = null;
+
+export function setAccessToken(token: string | null) {
+  accessToken = token;
 }
 
-export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { body, accessToken, headers, ...rest } = options;
+export function getAccessToken() {
+  return accessToken;
+}
+
+// api-spec.md #인증 방식 — Authorization: Bearer {accessToken}
+export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
 
   const res = await fetch(`${API_BASE_URL}${path}`, {
-    ...rest,
-    headers: {
-      "Content-Type": "application/json",
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      ...headers,
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    ...init,
+    headers: { ...headers, ...init?.headers },
   });
 
-  const data = await res.json().catch(() => null);
-
   if (!res.ok) {
-    if (data && data.status === "failed") {
-      throw new ApiError(res.status, data as ApiErrorBody);
-    }
-    throw new ApiError(res.status, {
-      status: "failed",
-      message: "알 수 없는 오류가 발생했습니다.",
-      error: { code: "UNKNOWN_ERROR", detail: `HTTP ${res.status}` },
-    });
+    // api-spec.md #공통 에러 응답
+    const body = await res.json().catch(() => null);
+    throw new ApiError(body?.message ?? `Request failed: ${path}`, res.status, body?.error?.code);
   }
-
-  return data as T;
+  return res.json() as Promise<T>;
 }
