@@ -1,6 +1,5 @@
 // api-spec.md #Base URL — 개발 환경 기본값
-// TODO: import.meta.env.VITE_API_BASE_URL 로 교체
-export const API_BASE_URL = "http://localhost:8000";
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
 export class ApiError extends Error {
   status: number;
@@ -14,11 +13,17 @@ export class ApiError extends Error {
   }
 }
 
-// TODO: 새로고침 후에도 유지되도록 localStorage에 영속화
-let accessToken: string | null = null;
+const ACCESS_TOKEN_STORAGE_KEY = "accessToken";
+
+let accessToken: string | null = localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
 
 export function setAccessToken(token: string | null) {
   accessToken = token;
+  if (token) {
+    localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, token);
+  } else {
+    localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+  }
 }
 
 export function getAccessToken() {

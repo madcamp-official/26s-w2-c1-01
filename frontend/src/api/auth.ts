@@ -1,40 +1,18 @@
 import type { User } from "../types/user";
 import type { GithubCallbackResponse } from "../types/auth";
-import { mockUser } from "../features/mock/mockData";
-
-export interface LoginPayload {
-  email: string;
-  password: string;
-}
+import { apiFetch } from "./client";
 
 // api-spec.md #2 GET /auth/github/login
-export async function getGithubLoginUrl(): Promise<{ redirectUrl: string }> {
-  await new Promise((r) => setTimeout(r, 100));
-  return { redirectUrl: "https://github.com/login/oauth/authorize?client_id=TODO" };
+export function getGithubLoginUrl(): Promise<{ redirectUrl: string }> {
+  return apiFetch<{ redirectUrl: string }>("/auth/github/login");
 }
 
 // api-spec.md #3 GET /auth/github/callback?code=...
-export async function exchangeGithubCode(_code: string): Promise<GithubCallbackResponse> {
-  await new Promise((r) => setTimeout(r, 300));
-  return { accessToken: "mock-access-token", user: mockUser };
+export function exchangeGithubCode(code: string): Promise<GithubCallbackResponse> {
+  return apiFetch<GithubCallbackResponse>(`/auth/github/callback?code=${encodeURIComponent(code)}`);
 }
 
 // api-spec.md #4 GET /me
-export async function getMe(): Promise<User> {
-  await new Promise((r) => setTimeout(r, 200));
-  return mockUser;
-}
-
-export async function login(payload: LoginPayload): Promise<User> {
-  await new Promise((r) => setTimeout(r, 300));
-  return { ...mockUser, email: payload.email };
-}
-
-export async function loginWithProvider(_provider: "github" | "google"): Promise<User> {
-  await new Promise((r) => setTimeout(r, 300));
-  return mockUser;
-}
-
-export async function logout(): Promise<void> {
-  await new Promise((r) => setTimeout(r, 100));
+export function getMe(): Promise<User> {
+  return apiFetch<User>("/me");
 }
