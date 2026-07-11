@@ -1,9 +1,17 @@
-// docs/api-spec.md 9. 채용공고 등록
-export type JobPostingInputType = "url" | "text";
+export type JobPostingMode = "url" | "image" | "text";
 
-export interface JobPosting {
-  jobPostingId: number;
-  inputType: JobPostingInputType;
+export interface ParsedJobPosting {
+  company: string;
+  role: string;
+  responsibilities: string[];
+  requirements: string[];
+  preferred: string[];
+}
+
+export interface JobPostingState {
+  mode: JobPostingMode;
+  url: string;
+  imageFiles: File[];
   rawText: string;
-  status: "completed";
+  parsed: ParsedJobPosting | null;
 }
