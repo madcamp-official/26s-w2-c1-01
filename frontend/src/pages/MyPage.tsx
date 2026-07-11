@@ -39,6 +39,22 @@ export function MyPage() {
         </Card>
 
         <Card style={{ marginBottom: 20 }}>
+          <div className="mypage-projects-row">
+            <div className="mypage-projects-row__info">
+              <p className="mypage-section-title">채용 공고 등록</p>
+              <p className="mypage-projects-row__desc">채용 공고 URL이나 텍스트를 등록하면 맞춤 이력서 추천을 받을 수 있어요.</p>
+            </div>
+            <Button
+              variant="primary"
+              style={{ padding: "12px 18px", fontSize: 14, whiteSpace: "nowrap" }}
+              onClick={() => navigate("/analyze")}
+            >
+              공고 등록하러 가기
+            </Button>
+          </div>
+        </Card>
+
+        <Card style={{ marginBottom: 20 }}>
           <div className="mypage-section-head">
             <p className="mypage-section-title">GitHub 연동</p>
             <button className="mypage-add-link" onClick={() => navigate("/analyze")}>

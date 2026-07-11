@@ -13,6 +13,16 @@
   padding: 14px var(--content-padding);
   display: flex;
   align-items: center;
+  justify-content: space-between;
+}
+
+.header__mypage {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink);
+}
+.header__mypage:hover {
+  color: var(--primary);
 }
 
 .header__logo {

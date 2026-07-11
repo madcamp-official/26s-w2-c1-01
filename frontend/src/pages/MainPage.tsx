@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { Header, PageContainer } from "../components/Layout";
 import { Button } from "../components/Button";
+import { useAuth } from "../features/auth/useAuth";
 import "./MainPage.css";
 
 const steps = [
@@ -28,6 +29,7 @@ const features = ["GitHub 프로젝트 자동 수집", "원문 근거 연결", "
 
 export function MainPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   return (
     <>
@@ -46,9 +48,15 @@ export function MainPage() {
             강조할 경험과 이력서 초안을 원문 근거와 함께 추천해 드려요.
           </p>
           <div className="main-hero__ctas">
-            <Button variant="primary" size="lg" onClick={() => navigate("/login")}>
-              GitHub로 시작하기
-            </Button>
+            {user ? (
+              <Button variant="primary" size="lg" onClick={() => navigate("/analyze")}>
+                채용 공고 URL 올리기
+              </Button>
+            ) : (
+              <Button variant="primary" size="lg" onClick={() => navigate("/login")}>
+                GitHub로 시작하기
+              </Button>
+            )}
           </div>
         </div>
 

@@ -15,7 +15,7 @@ export function LoginPage() {
     setLoggingIn(true);
     try {
       await loginWithGithub();
-      navigate("/my");
+      navigate("/");
     } finally {
       setLoggingIn(false);
     }
