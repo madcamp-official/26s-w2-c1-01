@@ -1,0 +1,116 @@
+.main-hero {
+  text-align: center;
+  margin-bottom: 72px;
+  padding-top: 24px;
+}
+
+.main-hero__badge {
+  display: inline-block;
+  background: var(--primary-tint);
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 800;
+  border-radius: var(--radius-pill);
+  padding: 8px 16px;
+  margin-bottom: 24px;
+}
+
+.main-hero__title {
+  margin: 0 0 18px;
+  font-weight: 800;
+  font-size: 48px;
+  line-height: 1.22;
+  letter-spacing: -0.035em;
+}
+.main-hero__title-accent {
+  color: var(--primary);
+}
+
+.main-hero__subtitle {
+  margin: 0 0 36px;
+  font-size: 18px;
+  color: var(--ink-sub);
+  line-height: 1.65;
+}
+
+.main-hero__ctas {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.main-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.main-step-card {
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  padding: 32px;
+  box-shadow: var(--shadow-card);
+}
+.main-step-card--dark {
+  background: var(--ink);
+  color: #fff;
+}
+
+.main-step-card__num {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--primary-tint);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 19px;
+  margin-bottom: 18px;
+}
+.main-step-card__num--accent {
+  background: var(--accent);
+  color: var(--ink);
+}
+
+.main-step-card__title {
+  margin: 0 0 8px;
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+
+.main-step-card__desc {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--ink-sub);
+}
+.main-step-card--dark .main-step-card__desc {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.main-features {
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+  flex-wrap: wrap;
+  padding: 22px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink-sub);
+}
+
+.main-features__item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.main-features__check {
+  color: var(--primary);
+}

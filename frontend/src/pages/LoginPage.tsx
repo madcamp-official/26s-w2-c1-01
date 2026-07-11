@@ -1,73 +1,90 @@
-import { useState } from "react";
-import { Navigate } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
-import { getErrorMessage } from "../api/client";
-import { isMockingEnabled } from "../api/mocks/enableMocking";
+import { useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
+import { Header, PageContainer } from "../components/Layout";
+import { Card } from "../components/Card";
+import { Button } from "../components/Button";
+import { useAuth } from "../features/auth/useAuth";
 import "./LoginPage.css";
 
 export function LoginPage() {
-  const { isAuthenticated, isLoading, loginWithGithub, handleGithubCallback } = useAuth();
-  const [isRedirecting, setIsRedirecting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const { login, loginWithProvider } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
-  if (!isLoading && isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
-  }
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    await login({ email, password });
+    navigate("/my");
+  };
 
-  async function handleLoginClick() {
-    setError(null);
-    setIsRedirecting(true);
-    try {
-      await loginWithGithub();
-    } catch (err) {
-      setIsRedirecting(false);
-      setError(getErrorMessage(err, "로그인을 시작할 수 없습니다. 잠시 후 다시 시도해주세요."));
-    }
-  }
-
-  // 실제 GitHub OAuth App이 없어도 mock 콜백으로 바로 로그인해 화면을 테스트할 수 있습니다.
-  async function handleTestLoginClick() {
-    setError(null);
-    setIsRedirecting(true);
-    try {
-      await handleGithubCallback("mock-code");
-    } catch (err) {
-      setIsRedirecting(false);
-      setError(getErrorMessage(err, "테스트 로그인에 실패했습니다."));
-    }
-  }
+  const handleProvider = async (provider: "github" | "google") => {
+    await loginWithProvider(provider);
+    navigate("/my");
+  };
 
   return (
-    <section className="login-page">
-      <div className="login-card">
-        <h1>채용공고 맞춤 이력서 추천</h1>
-        <p className="login-description">
-          GitHub 계정으로 로그인하면 프로젝트를 자동으로 수집하고, 채용공고에 맞는 이력서 내용을 추천해드립니다.
-        </p>
-        <button type="button" className="btn-primary" onClick={handleLoginClick} disabled={isRedirecting || isLoading}>
-          <GithubMark />
-          {isRedirecting ? "GitHub로 이동 중..." : "GitHub로 로그인"}
-        </button>
-        {isMockingEnabled() && (
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={handleTestLoginClick}
-            disabled={isRedirecting || isLoading}
-          >
-            테스트 계정으로 로그인 (mock)
-          </button>
-        )}
-        {error && <p className="login-error">{error}</p>}
-      </div>
-    </section>
-  );
-}
+    <>
+      <Header />
+      <PageContainer maxWidth={420} paddingTop={88}>
+        <Card large style={{ padding: "44px 36px" }}>
+          <div className="login-logo">핏</div>
+          <h1 className="login-title">다시 만나서 반가워요</h1>
+          <p className="login-subtitle">로그인하고 이전 분석 기록을 이어서 보세요.</p>
 
-function GithubMark() {
-  return (
-    <svg viewBox="0 0 16 16" width="20" height="20" fill="currentColor" aria-hidden="true">
-      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
-    </svg>
+          <form className="login-form" onSubmit={handleSubmit}>
+            <input
+              type="email"
+              placeholder="이메일"
+              className="login-input"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <input
+              type="password"
+              placeholder="비밀번호"
+              className="login-input"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <div className="login-forgot">
+              <a href="#">비밀번호를 잊으셨나요?</a>
+            </div>
+            <Button type="submit" variant="primary" fullWidth style={{ padding: 17, fontSize: 16 }}>
+              로그인
+            </Button>
+          </form>
+
+          <div className="login-divider">
+            <span className="login-divider__line" />
+            <span className="login-divider__text">또는</span>
+            <span className="login-divider__line" />
+          </div>
+
+          <div className="login-social">
+            <Button
+              variant="dark"
+              fullWidth
+              style={{ padding: 16, fontSize: 15 }}
+              onClick={() => handleProvider("github")}
+            >
+              GitHub로 계속하기
+            </Button>
+            <Button
+              variant="outline"
+              fullWidth
+              style={{ padding: 16, fontSize: 15 }}
+              onClick={() => handleProvider("google")}
+            >
+              Google로 계속하기
+            </Button>
+          </div>
+
+          <p className="login-signup">
+            아직 계정이 없나요? <a href="#">회원가입</a>
+          </p>
+        </Card>
+      </PageContainer>
+    </>
   );
 }
