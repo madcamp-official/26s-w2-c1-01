@@ -4,40 +4,50 @@ import { Header, PageContainer } from "../components/Layout";
 import { Card } from "../components/Card";
 import { Button } from "../components/Button";
 import { SegmentedControl } from "../components/SegmentedControl";
-import { Chip } from "../components/Chip";
 import { useJobPosting } from "../features/jobPosting/useJobPosting";
-import { usePortfolio } from "../features/portfolio/usePortfolio";
+import { useAuth } from "../features/auth/useAuth";
+import { startGithubCollection } from "../api/github";
+import { registerJobPosting } from "../api/jobPosting";
+import { ApiError } from "../api/client";
 import "./InputUploadPage.css";
 
 const jobModeOptions = [
   { value: "url" as const, label: "URL로 등록" },
-  { value: "image" as const, label: "이미지 업로드" },
   { value: "text" as const, label: "직접 입력" },
 ];
 
 export function InputUploadPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { state: jobState, setMode, setUrl, setRawText } = useJobPosting();
-  const {
-    state: portfolioState,
-    addGithubUrl,
-    addNotionUrl,
-    removeGithubUrl,
-    removeNotionUrl,
-  } = usePortfolio();
-  const [githubInput, setGithubInput] = useState("");
-  const [notionInput, setNotionInput] = useState("");
+  const [agreedToAnalyze, setAgreedToAnalyze] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleAddGithub = () => {
-    if (!githubInput.trim()) return;
-    addGithubUrl(githubInput.trim());
-    setGithubInput("");
-  };
+  const content = jobState.mode === "url" ? jobState.url : jobState.rawText;
+  const canSubmit = agreedToAnalyze && content.trim().length > 0 && !submitting;
 
-  const handleAddNotion = () => {
-    if (!notionInput.trim()) return;
-    addNotionUrl(notionInput.trim());
-    setNotionInput("");
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setErrorMessage(null);
+
+    try {
+      // api-spec.md #5 POST /github/collection-jobs
+      await startGithubCollection(agreedToAnalyze as true);
+      // api-spec.md #9 POST /job-postings
+      const jobPosting = await registerJobPosting({ inputType: jobState.mode, content: content.trim() });
+      navigate("/projects", { state: { jobPostingId: jobPosting.jobPostingId } });
+    } catch (err) {
+      if (err instanceof ApiError && err.code === "JOB_POSTING_URL_FETCH_FAILED") {
+        setMode("text");
+        setErrorMessage("채용공고 URL을 읽을 수 없어요. 공고 내용을 직접 입력해 주세요.");
+      } else {
+        setErrorMessage(err instanceof Error ? err.message : "잠시 후 다시 시도해 주세요.");
+      }
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -51,17 +61,48 @@ export function InputUploadPage() {
           3분이면 충분해요
         </h1>
         <p className="input-subtitle">
-          채용공고와 포트폴리오를 등록하면
+          GitHub 프로젝트를 수집하고 채용공고를 등록하면
           <br />
-          강조할 경험과 이력서 문장을 근거와 함께 추천해 드려요.
+          강조할 경험과 이력서 초안을 근거와 함께 추천해 드려요.
         </p>
 
         <Card style={{ marginBottom: 20 }}>
           <div className="input-card-head">
-            <span className="input-card-title">채용공고 등록</span>
+            <span className="input-card-title">GitHub 프로젝트 수집</span>
             <span className="input-step-badge">STEP 1</span>
           </div>
-          <p className="input-card-desc">URL이 막혀 있으면 이미지나 직접 입력으로 등록할 수 있어요.</p>
+          <p className="input-card-desc">로그인한 GitHub 계정의 repository와 README를 수집해 프로젝트 후보를 만들어요.</p>
+
+          <div className="input-github-row">
+            <span className="input-github-row__badge">GitHub</span>
+            <span className="input-github-row__id">github.com/{user?.githubId ?? "yxxnxyxxn"}</span>
+            <span className="input-github-row__status">로그인됨 ✓</span>
+          </div>
+
+          <div
+            className="input-consent-row"
+            role="checkbox"
+            aria-checked={agreedToAnalyze}
+            tabIndex={0}
+            onClick={() => setAgreedToAnalyze((v) => !v)}
+            onKeyDown={(e) => e.key === "Enter" && setAgreedToAnalyze((v) => !v)}
+          >
+            <span className={`input-consent-row__box${agreedToAnalyze ? " input-consent-row__box--checked" : ""}`}>
+              {agreedToAnalyze ? "✓" : ""}
+            </span>
+            <div>
+              <p className="input-consent-row__title">공개 repository 분석에 동의합니다</p>
+              <p className="input-consent-row__desc">수집한 내용은 프로젝트 후보 생성과 이력서 추천에만 사용돼요.</p>
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <div className="input-card-head">
+            <span className="input-card-title">채용공고 등록</span>
+            <span className="input-step-badge">STEP 2</span>
+          </div>
+          <p className="input-card-desc">URL을 읽지 못하면 직접 입력으로 안내해 드려요.</p>
 
           <SegmentedControl options={jobModeOptions} value={jobState.mode} onChange={setMode} />
 
@@ -76,16 +117,8 @@ export function InputUploadPage() {
               />
               <div className="input-hint">
                 <span className="input-hint__dot" />
-                담당 업무 · 자격 요건 · 우대 사항을 자동으로 추출해요
+                회사명 · 직무 · 필수/우대 기술 · 요구 역량을 자동으로 추출해요
               </div>
-            </div>
-          )}
-
-          {jobState.mode === "image" && (
-            <div className="input-dropzone">
-              <div className="input-dropzone__icon">↑</div>
-              <p className="input-dropzone__title">공고 캡처 이미지를 올려주세요</p>
-              <p className="input-dropzone__desc">PNG · JPG · 최대 10MB, 여러 장도 괜찮아요</p>
             </div>
           )}
 
@@ -98,67 +131,20 @@ export function InputUploadPage() {
               onChange={(e) => setRawText(e.target.value)}
             />
           )}
-        </Card>
 
-        <Card>
-          <div className="input-card-head">
-            <span className="input-card-title">포트폴리오 등록</span>
-            <span className="input-step-badge">STEP 2</span>
-          </div>
-          <p className="input-card-desc">여러 개를 등록할수록 추천이 정확해져요.</p>
-
-          <div className="input-field-stack" style={{ marginBottom: 16 }}>
-            <div className="input-url-row">
-              <span className="input-url-row__label">GitHub</span>
-              <input
-                type="url"
-                placeholder="https://github.com/username"
-                className="input-url-row__field"
-                value={githubInput}
-                onChange={(e) => setGithubInput(e.target.value)}
-              />
-              <button className="input-url-row__btn" onClick={handleAddGithub}>
-                추가
-              </button>
-            </div>
-            <div className="input-url-row">
-              <span className="input-url-row__label">Notion</span>
-              <input
-                type="url"
-                placeholder="공개된 Notion 포트폴리오 URL"
-                className="input-url-row__field"
-                value={notionInput}
-                onChange={(e) => setNotionInput(e.target.value)}
-              />
-              <button className="input-url-row__btn" onClick={handleAddNotion}>
-                추가
-              </button>
-            </div>
-          </div>
-
-          <div className="input-dropzone input-dropzone--small">
-            <p className="input-dropzone__title">PDF 이력서 끌어다 놓기</p>
-            <p className="input-dropzone__desc">기존 이력서가 있다면 함께 분석해 드려요</p>
-          </div>
-
-          <div className="input-chip-row">
-            {portfolioState.githubUrls.map((url) => (
-              <Chip key={url} onRemove={() => removeGithubUrl(url)}>
-                {url}
-              </Chip>
-            ))}
-            {portfolioState.notionUrls.map((url) => (
-              <Chip key={url} onRemove={() => removeNotionUrl(url)}>
-                {url}
-              </Chip>
-            ))}
-          </div>
+          {errorMessage && <p className="input-error">{errorMessage}</p>}
         </Card>
       </PageContainer>
 
       <div className="input-fixed-cta">
-        <Button variant="primary" size="lg" className="input-fixed-cta__btn" onClick={() => navigate("/projects")}>
-          자료 수집하고 프로젝트 확인하기 →
+        <Button
+          variant="primary"
+          size="lg"
+          className="input-fixed-cta__btn"
+          disabled={!canSubmit}
+          onClick={handleSubmit}
+        >
+          {submitting ? "수집하는 중..." : "프로젝트 수집하고 확인하기 →"}
         </Button>
       </div>
     </>

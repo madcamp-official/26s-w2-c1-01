@@ -11,6 +11,12 @@
 .btn:active {
   transform: scale(0.98);
 }
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
 .btn--full {
   display: block;
   width: 100%;

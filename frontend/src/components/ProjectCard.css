@@ -26,6 +26,12 @@
   flex-wrap: wrap;
 }
 
+.project-card__repo {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-faint);
+}
+
 .project-card__title {
   width: 100%;
   box-sizing: border-box;
@@ -43,13 +49,8 @@
   border-bottom-color: var(--border);
 }
 
-.project-card__actions {
-  display: flex;
-  gap: 6px;
-  flex: none;
-}
-
 .project-card__exclude-btn {
+  flex: none;
   border: none;
   cursor: pointer;
   font-family: inherit;

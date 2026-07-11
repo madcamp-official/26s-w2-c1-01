@@ -6,29 +6,25 @@ import "./MainPage.css";
 const steps = [
   {
     num: "1",
-    title: "공고와 포트폴리오 등록",
-    desc: "채용공고는 URL·이미지·직접 입력으로, 포트폴리오는 GitHub·Notion·PDF로 간편하게 등록해요.",
+    title: "GitHub 연동과 공고 등록",
+    desc: "GitHub 로그인 한 번으로 repository와 README를 수집하고, 채용공고는 URL이나 텍스트로 등록해요.",
     dark: false,
   },
   {
     num: "2",
     title: "LLM이 분석하고 매칭",
-    desc: "공고 요구 역량과 내 프로젝트를 의미 단위로 비교해 적합도 순위를 계산해요.",
+    desc: "공고 요구 기술과 내 프로젝트를 비교해 적합도 점수와 추천 순위를 계산해요.",
     dark: false,
   },
   {
     num: "3",
-    title: "근거 있는 문장 추천",
+    title: "근거 있는 초안 생성",
     desc: "모든 문장에 원문 출처를 연결해요. 없는 경험과 확인 안 된 수치는 만들지 않아요.",
     dark: true,
   },
 ];
 
-const features = [
-  "부족 역량 보완 프로젝트 제안",
-  "Markdown · PDF 내보내기",
-  "분석 기록 저장",
-];
+const features = ["GitHub 프로젝트 자동 수집", "원문 근거 연결", "부족 역량 보완 프로젝트 제안"];
 
 export function MainPage() {
   const navigate = useNavigate();
@@ -45,16 +41,13 @@ export function MainPage() {
             새로 쓰지 말고 <span className="main-hero__title-accent">골라 쓰세요</span>
           </h1>
           <p className="main-hero__subtitle">
-            채용공고와 포트폴리오를 등록하면,
+            GitHub 프로젝트를 자동으로 수집하고,
             <br />
-            강조할 경험과 이력서 문장을 원문 근거와 함께 추천해 드려요.
+            강조할 경험과 이력서 초안을 원문 근거와 함께 추천해 드려요.
           </p>
           <div className="main-hero__ctas">
-            <Button variant="primary" size="lg" onClick={() => navigate("/analyze")}>
-              지금 분석 시작하기
-            </Button>
-            <Button variant="outline" size="lg" onClick={() => navigate("/login")}>
-              로그인
+            <Button variant="primary" size="lg" onClick={() => navigate("/login")}>
+              GitHub로 시작하기
             </Button>
           </div>
         </div>

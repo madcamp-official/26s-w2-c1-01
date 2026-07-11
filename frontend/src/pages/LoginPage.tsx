@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header, PageContainer } from "../components/Layout";
 import { Card } from "../components/Card";
@@ -8,80 +8,46 @@ import "./LoginPage.css";
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const { login, loginWithProvider } = useAuth();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const { loginWithGithub } = useAuth();
+  const [loggingIn, setLoggingIn] = useState(false);
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    await login({ email, password });
-    navigate("/my");
-  };
-
-  const handleProvider = async (provider: "github" | "google") => {
-    await loginWithProvider(provider);
-    navigate("/my");
+  const handleLogin = async () => {
+    setLoggingIn(true);
+    try {
+      await loginWithGithub();
+      navigate("/my");
+    } finally {
+      setLoggingIn(false);
+    }
   };
 
   return (
     <>
       <Header />
-      <PageContainer maxWidth={420} paddingTop={88}>
-        <Card large style={{ padding: "44px 36px" }}>
+      <PageContainer maxWidth={420} paddingTop={110} centered>
+        <Card large style={{ padding: "44px 36px", textAlign: "center" }}>
           <div className="login-logo">핏</div>
-          <h1 className="login-title">다시 만나서 반가워요</h1>
-          <p className="login-subtitle">로그인하고 이전 분석 기록을 이어서 보세요.</p>
+          <h1 className="login-title">GitHub로 시작해요</h1>
+          <p className="login-subtitle">
+            이력핏은 GitHub 계정으로 로그인해요.
+            <br />
+            로그인하면 프로젝트 수집을 바로 시작할 수 있어요.
+          </p>
 
-          <form className="login-form" onSubmit={handleSubmit}>
-            <input
-              type="email"
-              placeholder="이메일"
-              className="login-input"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-            <input
-              type="password"
-              placeholder="비밀번호"
-              className="login-input"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            <div className="login-forgot">
-              <a href="#">비밀번호를 잊으셨나요?</a>
-            </div>
-            <Button type="submit" variant="primary" fullWidth style={{ padding: 17, fontSize: 16 }}>
-              로그인
-            </Button>
-          </form>
+          <Button
+            variant="dark"
+            fullWidth
+            style={{ padding: 17, fontSize: 16 }}
+            onClick={handleLogin}
+            disabled={loggingIn}
+          >
+            {loggingIn ? "로그인하는 중..." : "GitHub로 로그인"}
+          </Button>
 
-          <div className="login-divider">
-            <span className="login-divider__line" />
-            <span className="login-divider__text">또는</span>
-            <span className="login-divider__line" />
-          </div>
-
-          <div className="login-social">
-            <Button
-              variant="dark"
-              fullWidth
-              style={{ padding: 16, fontSize: 15 }}
-              onClick={() => handleProvider("github")}
-            >
-              GitHub로 계속하기
-            </Button>
-            <Button
-              variant="outline"
-              fullWidth
-              style={{ padding: 16, fontSize: 15 }}
-              onClick={() => handleProvider("google")}
-            >
-              Google로 계속하기
-            </Button>
-          </div>
-
-          <p className="login-signup">
-            아직 계정이 없나요? <a href="#">회원가입</a>
+          <p className="login-footnote">
+            로그인 시 공개 프로필 정보만 사용해요.
+            <br />
+            repository 분석은 별도 동의 후에 진행돼요.
           </p>
         </Card>
       </PageContainer>
