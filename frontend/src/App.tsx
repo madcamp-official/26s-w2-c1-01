@@ -1,78 +1,22 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
+import { MainPage } from "./pages/MainPage";
 import { LoginPage } from "./pages/LoginPage";
-import { AuthCallbackPage } from "./pages/AuthCallbackPage";
-import { DashboardPage } from "./pages/DashboardPage";
-import { CollectionConsentPage } from "./pages/CollectionConsentPage";
-import { ProjectsPage } from "./pages/ProjectsPage";
-import { JobPostingPage } from "./pages/JobPostingPage";
-import { JobPostingAnalysisPage } from "./pages/JobPostingAnalysisPage";
-import { ResumeJobPage } from "./pages/ResumeJobPage";
-import { ResumeResultPage } from "./pages/ResumeResultPage";
-import { ProtectedRoute } from "./components/ProtectedRoute";
+import { MyPage } from "./pages/MyPage";
+import { InputUploadPage } from "./pages/InputUploadPage";
+import { ProjectEditPage } from "./pages/ProjectEditPage";
+import { AnalysisProgressPage } from "./pages/AnalysisProgressPage";
+import { RecommendationResultPage } from "./pages/RecommendationResultPage";
 
 function App() {
   return (
     <Routes>
+      <Route path="/" element={<MainPage />} />
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/auth/github/callback" element={<AuthCallbackPage />} />
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <DashboardPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/collect"
-        element={
-          <ProtectedRoute>
-            <CollectionConsentPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/projects"
-        element={
-          <ProtectedRoute>
-            <ProjectsPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/job-posting"
-        element={
-          <ProtectedRoute>
-            <JobPostingPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/job-postings/:jobPostingId/analysis"
-        element={
-          <ProtectedRoute>
-            <JobPostingAnalysisPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/resume-jobs/:jobId"
-        element={
-          <ProtectedRoute>
-            <ResumeJobPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/resume-results/:resumeResultId"
-        element={
-          <ProtectedRoute>
-            <ResumeResultPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/my" element={<MyPage />} />
+      <Route path="/analyze" element={<InputUploadPage />} />
+      <Route path="/projects" element={<ProjectEditPage />} />
+      <Route path="/progress" element={<AnalysisProgressPage />} />
+      <Route path="/result/:id" element={<RecommendationResultPage />} />
     </Routes>
   );
 }
