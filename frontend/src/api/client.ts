@@ -1,24 +1,44 @@
-// TODO: replace with real base URL from env (e.g. import.meta.env.VITE_API_BASE_URL)
-export const API_BASE_URL = "/api";
+// api-spec.md #Base URL — 개발 환경 기본값
+// TODO: import.meta.env.VITE_API_BASE_URL 로 교체
+export const API_BASE_URL = "http://localhost:8000";
 
 export class ApiError extends Error {
-  constructor(
-    message: string,
-    public status: number,
-  ) {
+  status: number;
+  code?: string;
+
+  constructor(message: string, status: number, code?: string) {
     super(message);
     this.name = "ApiError";
+    this.status = status;
+    this.code = code;
   }
 }
 
-// TODO: wire up fetch with auth headers/cookies once backend auth is defined
+// TODO: 새로고침 후에도 유지되도록 localStorage에 영속화
+let accessToken: string | null = null;
+
+export function setAccessToken(token: string | null) {
+  accessToken = token;
+}
+
+export function getAccessToken() {
+  return accessToken;
+}
+
+// api-spec.md #인증 방식 — Authorization: Bearer {accessToken}
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+
   const res = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { "Content-Type": "application/json" },
     ...init,
+    headers: { ...headers, ...init?.headers },
   });
+
   if (!res.ok) {
-    throw new ApiError(`Request failed: ${path}`, res.status);
+    // api-spec.md #공통 에러 응답
+    const body = await res.json().catch(() => null);
+    throw new ApiError(body?.message ?? `Request failed: ${path}`, res.status, body?.error?.code);
   }
   return res.json() as Promise<T>;
 }

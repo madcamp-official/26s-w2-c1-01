@@ -1,13 +1,12 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import type { User } from "../../types/user";
-import { login as apiLogin, loginWithProvider as apiLoginWithProvider, logout as apiLogout } from "../../api/auth";
-import type { LoginPayload } from "../../api/auth";
+import { exchangeGithubCode, getGithubLoginUrl } from "../../api/auth";
+import { setAccessToken } from "../../api/client";
 
 interface AuthContextValue {
   user: User | null;
-  login: (payload: LoginPayload) => Promise<void>;
-  loginWithProvider: (provider: "github" | "google") => Promise<void>;
-  logout: () => Promise<void>;
+  loginWithGithub: () => Promise<void>;
+  logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -15,25 +14,22 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
 
-  const login = async (payload: LoginPayload) => {
-    const loggedInUser = await apiLogin(payload);
+  const loginWithGithub = async () => {
+    // api-spec.md #2 GET /auth/github/login — 실제 구현에서는 이 redirectUrl로 이동 후 GitHub 콜백에서 code를 받음
+    await getGithubLoginUrl();
+    // api-spec.md #3 GET /auth/github/callback?code=...
+    const { accessToken, user: loggedInUser } = await exchangeGithubCode("mock-code");
+    setAccessToken(accessToken);
     setUser(loggedInUser);
   };
 
-  const loginWithProvider = async (provider: "github" | "google") => {
-    const loggedInUser = await apiLoginWithProvider(provider);
-    setUser(loggedInUser);
-  };
-
-  const logout = async () => {
-    await apiLogout();
+  const logout = () => {
+    setAccessToken(null);
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, loginWithProvider, logout }}>
-      {children}
-    </AuthContext.Provider>
+    <AuthContext.Provider value={{ user, loginWithGithub, logout }}>{children}</AuthContext.Provider>
   );
 }
 

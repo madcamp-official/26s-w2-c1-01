@@ -1,41 +1,55 @@
-import { useEffect, useRef, useState } from "react";
-import type { AnalysisStatus } from "../../types/analysis";
+import { useEffect, useState } from "react";
+import type { JobStatus } from "../../types/job";
+import { getAnalysisJob, startAnalysisJob } from "../../api/analysis";
 import { mockAnalysisSteps } from "../mock/mockData";
 
 export const analysisSteps = mockAnalysisSteps;
 
 interface UseAnalysisOptions {
-  autoAdvance?: boolean;
-  speed?: number;
-  onComplete?: () => void;
+  jobPostingId: number;
+  onComplete: (jobId: number) => void;
 }
 
-// TODO: 실제 앱에서는 startAnalysis + subscribeAnalysisProgress(SSE)로 대체
-export function useAnalysis({ autoAdvance = true, speed = 1, onComplete }: UseAnalysisOptions = {}) {
+export function useAnalysis({ jobPostingId, onComplete }: UseAnalysisOptions) {
   const [progress, setProgress] = useState(0);
-  const [status, setStatus] = useState<AnalysisStatus>("running");
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [status, setStatus] = useState<JobStatus>("pending");
 
   useEffect(() => {
-    intervalRef.current = setInterval(() => {
-      setProgress((prev) => {
-        const next = Math.min(100, prev + 1.1 * speed);
-        if (next >= 100) {
-          if (intervalRef.current) clearInterval(intervalRef.current);
-          setStatus("done");
-          if (autoAdvance) {
-            setTimeout(() => onComplete?.(), 700);
-          }
+    let cancelled = false;
+    let pollTimer: ReturnType<typeof setTimeout>;
+    const tickTimer = setInterval(() => setProgress((p) => Math.min(95, p + 1)), 90);
+
+    // api-spec.md #11 GET /analysis-jobs/{jobId} — completed/failed일 때까지 주기적으로 확인
+    async function poll(jobId: number) {
+      const result = await getAnalysisJob(jobId);
+      if (cancelled) return;
+      setStatus(result.status);
+
+      if (result.status === "completed" || result.status === "failed") {
+        clearInterval(tickTimer);
+        if (result.status === "completed") {
+          setProgress(100);
+          setTimeout(() => onComplete(jobId), 500);
         }
-        return next;
-      });
-    }, 60);
+        return;
+      }
+      pollTimer = setTimeout(() => poll(jobId), 1200);
+    }
+
+    // api-spec.md #10 POST /job-postings/{jobPostingId}/analysis-jobs
+    startAnalysisJob(jobPostingId).then((job) => {
+      if (cancelled) return;
+      setStatus(job.status);
+      pollTimer = setTimeout(() => poll(job.jobId), 1800);
+    });
 
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      cancelled = true;
+      clearInterval(tickTimer);
+      clearTimeout(pollTimer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [jobPostingId]);
 
   let currentStep = 0;
   analysisSteps.forEach((step, i) => {

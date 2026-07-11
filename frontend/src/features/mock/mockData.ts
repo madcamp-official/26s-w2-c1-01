@@ -1,136 +1,245 @@
+import type { User } from "../../types/user";
 import type { Project } from "../../types/project";
+import type { ParsedJobPosting } from "../../types/jobPosting";
+import type { RecommendedProject } from "../../types/analysis";
+import type { ResumeResult } from "../../types/resume";
+import type { Evidence } from "../../types/evidence";
 import type { AnalysisResult } from "../../types/result";
 import type { HistoryEntry } from "../../types/history";
 import type { ConnectedSource } from "../../types/portfolio";
-import type { User } from "../../types/user";
+import type { AnalysisStep } from "../../types/analysis";
 
 export const mockUser: User = {
-  id: "u1",
+  id: 1,
+  githubId: "yxxnxyxxn",
   name: "유나연",
+  avatarUrl: "https://github.com/yxxnxyxxn.png",
   email: "yxxnxyxxn@gmail.com",
   headline: "프론트엔드 개발자 지망",
 };
 
 export const mockProjects: Project[] = [
   {
-    id: "p1",
-    title: "실시간 협업 화이트보드",
-    role: "프론트엔드 리드 (2인 팀)",
-    stack: ["React", "TypeScript", "WebSocket", "Canvas API"],
-    problem: "동시 편집 시 도형 상태가 충돌하는 문제를 CRDT 기반 병합 로직으로 해결",
-    result: "평균 렌더링 프레임 28fps → 58fps 개선, 동시 접속 40명 테스트 통과",
-    source: "GitHub",
-    excluded: false,
+    projectId: 1,
+    title: "쇼핑몰 백엔드 API 서버",
+    description: "Spring Boot와 MySQL을 사용해 주문, 상품, 회원 API를 구현한 프로젝트",
+    role: "백엔드 개발",
+    skills: ["Spring Boot", "MySQL", "JPA"],
+    achievements: ["주문 API 구현", "상품 검색 기능 구현"],
+    sourceType: "github",
+    sourceUrl: "https://github.com/example/shop-server",
+    evidenceIds: [1001, 1002],
   },
   {
-    id: "p2",
-    title: "LLM 회의록 요약 봇",
-    role: "풀스택 (개인 프로젝트)",
-    stack: ["FastAPI", "OpenAI API", "React"],
-    problem: "긴 회의록의 토큰 한도 초과 문제를 청크 분할 + 맵리듀스 요약으로 해결",
-    result: "60분 회의록 요약 시간 4분 → 40초 단축, 사내 스터디 12명 사용",
-    source: "Notion",
-    excluded: false,
+    projectId: 2,
+    title: "실시간 채팅 서버",
+    description: "WebSocket과 Redis를 사용한 실시간 채팅 서버",
+    role: "백엔드 개발",
+    skills: ["WebSocket", "Redis"],
+    achievements: ["다중 채팅방 구현", "메시지 브로드캐스트 최적화"],
+    sourceType: "github",
+    sourceUrl: "https://github.com/example/chat-server",
+    evidenceIds: [1003],
   },
   {
-    id: "p3",
-    title: "대학 커뮤니티 앱",
-    role: "프론트엔드 (4인 팀)",
-    stack: ["React Native", "Firebase"],
-    problem: "게시글 목록 스크롤 버벅임을 리스트 가상화로 해결",
-    result: "출시 3개월 만에 교내 사용자 1,200명 확보",
-    source: "PDF 이력서",
-    excluded: true,
-  },
-  {
-    id: "p4",
-    title: "개인 블로그 리뉴얼",
-    role: "개인 프로젝트",
-    stack: ["Next.js", "MDX"],
-    problem: "Lighthouse 성능 점수 61점을 이미지 최적화·SSG 전환으로 개선",
-    result: "성능 점수 98점 달성, 월 방문자 800명",
-    source: "GitHub",
-    excluded: false,
+    projectId: 3,
+    title: "게시판 REST API",
+    description: "REST API 설계 원칙을 적용한 게시판 서버",
+    role: "백엔드 개발",
+    skills: ["REST API", "MySQL"],
+    achievements: ["페이지네이션 구현", "권한 검증 미들웨어 구현"],
+    sourceType: "github",
+    sourceUrl: "https://github.com/example/board-api",
+    evidenceIds: [1004],
   },
 ];
 
-export const mockAnalysisSteps = [
-  { label: "채용공고를 분석하고 있어요", at: 0 },
-  { label: "포트폴리오와 매칭하는 중이에요", at: 30 },
-  { label: "이력서 문장 초안을 만들고 있어요", at: 60 },
-  { label: "부족 역량을 점검하고 있어요", at: 85 },
+export const mockParsedJobPosting: ParsedJobPosting = {
+  jobPostingId: 201,
+  companyName: "예시회사",
+  role: "Backend Developer",
+  requiredSkills: ["Spring Boot", "MySQL"],
+  preferredSkills: ["Docker", "AWS"],
+  competencies: ["문제 해결", "협업"],
+};
+
+export const mockRecommendedProjects: RecommendedProject[] = [
+  {
+    projectId: 1,
+    title: "쇼핑몰 백엔드 API 서버",
+    score: 91,
+    reason: "Spring Boot와 MySQL 경험이 공고의 필수 기술과 잘 맞습니다.",
+    matchedSkills: ["Spring Boot", "MySQL"],
+    missingSkills: ["AWS"],
+    evidenceIds: [1001, 1002],
+  },
+  {
+    projectId: 2,
+    title: "실시간 채팅 서버",
+    score: 84,
+    reason: "백엔드 API 설계와 서버 운영 경험을 보여줄 수 있습니다.",
+    matchedSkills: ["WebSocket", "Redis"],
+    missingSkills: ["Spring Boot"],
+    evidenceIds: [1003],
+  },
+  {
+    projectId: 3,
+    title: "게시판 REST API",
+    score: 78,
+    reason: "REST API 설계 경험이 직무 요구사항과 일부 연결됩니다.",
+    matchedSkills: ["REST API", "MySQL"],
+    missingSkills: ["Docker", "AWS"],
+    evidenceIds: [1004],
+  },
+];
+
+export const mockResumeResult: ResumeResult = {
+  resumeResultId: 601,
+  jobPostingId: 201,
+  title: "Backend Developer 지원 이력서 초안",
+  summary: "Spring Boot와 MySQL 기반 백엔드 API 개발 경험을 중심으로 구성한 이력서 초안입니다.",
+  sections: [
+    {
+      sectionType: "profile_summary",
+      heading: "요약",
+      content: "Spring Boot 기반 API 서버 개발과 MySQL 데이터 모델링 경험을 보유한 백엔드 개발자입니다.",
+      evidenceIds: [1001, 1002],
+    },
+    {
+      sectionType: "skills",
+      heading: "기술 스택",
+      content: "Spring Boot, MySQL, JPA, Docker",
+      evidenceIds: [1001, 1002],
+    },
+    {
+      sectionType: "project",
+      heading: "쇼핑몰 백엔드 API 서버",
+      content:
+        "Spring Boot와 MySQL을 사용해 주문, 상품, 회원 API를 구현했습니다. 공고의 필수 기술인 Spring Boot와 MySQL 경험을 직접적으로 보여줄 수 있는 프로젝트입니다.",
+      projectId: 1,
+      evidenceIds: [1001, 1002],
+    },
+  ],
+  missingSkills: ["AWS"],
+  suggestedProjects: [
+    {
+      title: "Spring Boot 애플리케이션 AWS 배포 프로젝트",
+      description: "기존 Spring Boot 프로젝트를 Docker 이미지로 만들고 AWS EC2에 배포하는 프로젝트입니다.",
+      targetSkills: ["AWS", "Docker"],
+      estimatedDuration: "3~5일",
+      reason: "공고에서 AWS 경험을 우대하지만 기존 프로젝트 근거에서 AWS 사용 경험이 확인되지 않았습니다.",
+    },
+  ],
+  warnings: ["성과 수치가 확인되지 않아 정량적 성과 문장은 생성하지 않았습니다."],
+  createdAt: "2026-07-10T16:30:00+09:00",
+};
+
+export const mockEvidences: Record<number, Evidence> = {
+  1001: {
+    evidenceId: 1001,
+    sourceType: "github",
+    sourceUrl: "https://github.com/example/shop-server",
+    title: "README.md",
+    content: "Spring Boot와 MySQL을 사용한 쇼핑몰 백엔드 API 서버입니다.",
+    projectId: 1,
+  },
+  1002: {
+    evidenceId: 1002,
+    sourceType: "github",
+    sourceUrl: "https://github.com/example/shop-server",
+    title: "README.md · 트러블슈팅",
+    content: "주문 동시성 문제를 낙관적 락으로 해결했습니다.",
+    projectId: 1,
+  },
+  1003: {
+    evidenceId: 1003,
+    sourceType: "github",
+    sourceUrl: "https://github.com/example/chat-server",
+    title: "README.md",
+    content: "WebSocket과 Redis Pub/Sub으로 다중 서버 환경에서도 메시지를 브로드캐스트합니다.",
+    projectId: 2,
+  },
+  1004: {
+    evidenceId: 1004,
+    sourceType: "github",
+    sourceUrl: "https://github.com/example/board-api",
+    title: "README.md",
+    content: "REST 원칙에 따라 리소스를 설계하고 페이지네이션을 구현했습니다.",
+    projectId: 3,
+  },
+};
+
+export const mockAnalysisSteps: AnalysisStep[] = [
+  { label: "채용공고 구조화", at: 0 },
+  { label: "프로젝트 비교", at: 33 },
+  { label: "이력서 문장 생성", at: 66 },
+  { label: "근거 연결", at: 90 },
 ];
 
 export const mockResult: AnalysisResult = {
-  id: "r1",
-  jobTitle: "핀테크 스타트업 A사 · 프론트엔드 개발자 공고 기준",
-  matchScore: 78,
+  jobTitle: "예시회사 · Backend Developer",
+  matchScore: 82,
   skills: [
-    { name: "React / 컴포넌트 설계", pct: 92, weak: false },
-    { name: "TypeScript", pct: 88, weak: false },
-    { name: "상태 관리", pct: 74, weak: false },
-    { name: "성능 최적화", pct: 65, weak: false },
-    { name: "CI/CD", pct: 42, weak: true },
-    { name: "테스트 자동화", pct: 38, weak: true },
+    { name: "Spring Boot", pct: 95 },
+    { name: "MySQL", pct: 88 },
+    { name: "REST API", pct: 80 },
+    { name: "Docker", pct: 45, weak: true },
+    { name: "AWS", pct: 20, weak: true },
   ],
   rankedProjects: [
     {
       rank: 1,
-      title: "실시간 협업 화이트보드",
+      title: "쇼핑몰 백엔드 API 서버",
       fitPct: 91,
-      description:
-        "공고의 실시간 데이터 처리 · React 성능 최적화 요건과 직접적으로 겹치는 유일한 경험이에요.",
+      description: "Spring Boot와 MySQL 경험이 공고의 필수 기술과 잘 맞습니다.",
     },
     {
       rank: 2,
-      title: "LLM 회의록 요약 봇",
-      fitPct: 82,
-      description: "우대 사항인 LLM API 활용 경험을 증명해요.",
+      title: "실시간 채팅 서버",
+      fitPct: 84,
+      description: "백엔드 API 설계와 서버 운영 경험을 보여줄 수 있습니다.",
     },
     {
       rank: 3,
-      title: "대학 커뮤니티 앱",
-      fitPct: 64,
-      description:
-        "사용자 규모 성과는 좋지만 기술 스택이 공고와 달라요. 간단히만 언급하세요.",
+      title: "게시판 REST API",
+      fitPct: 78,
+      description: "REST API 설계 경험이 직무 요구사항과 일부 연결됩니다.",
     },
   ],
   sentences: [
     {
       id: "s1",
-      text: "WebSocket 기반 실시간 동기화 구조를 설계하고 CRDT 병합 로직을 도입해, 40명 동시 편집 환경에서 상태 충돌 없이 렌더링 성능을 2배(28→58fps) 개선했습니다.",
-      srcRef: "GitHub · whiteboard/README.md › 트러블슈팅",
-      srcQuote:
-        "CRDT 기반 병합 로직 도입 후 동시 접속 40명 부하 테스트에서 충돌 0건, 평균 프레임 28fps에서 58fps로 개선",
+      text: "Spring Boot와 MySQL을 사용해 주문·상품·회원 API를 구현한 백엔드 개발 경험이 있습니다.",
+      srcRef: "github.com/example/shop-server · README.md",
+      srcQuote: "Spring Boot와 MySQL을 사용한 쇼핑몰 백엔드 API 서버입니다.",
     },
     {
       id: "s2",
-      text: "LLM 토큰 한도를 초과하는 장문 회의록을 청크 분할–맵리듀스 요약 파이프라인으로 처리해, 60분 분량 요약 시간을 4분에서 40초로 단축했습니다.",
-      srcRef: "Notion · 회의록 요약 봇 회고",
-      srcQuote:
-        "청크 분할 후 부분 요약을 다시 합치는 방식으로 변경하면서 60분짜리 회의록 기준 4분 → 40초",
+      text: "주문 동시성 문제를 낙관적 락으로 해결하며 트랜잭션 안정성을 확보했습니다.",
+      srcRef: "github.com/example/shop-server · README.md · 트러블슈팅",
+      srcQuote: "주문 동시성 문제를 낙관적 락으로 해결했습니다.",
     },
     {
       id: "s3",
-      text: "리스트 가상화를 적용해 커뮤니티 앱 게시글 스크롤 버벅임을 해소했으며, 출시 3개월 만에 교내 사용자 1,200명을 확보한 서비스의 프론트엔드를 담당했습니다.",
-      srcRef: "PDF 이력서 · 2p 프로젝트 경험",
-      srcQuote: "FlatList 가상화 적용으로 스크롤 프레임 저하 해결, 출시 3개월 사용자 1,200명",
+      text: "WebSocket과 Redis Pub/Sub을 활용해 실시간 채팅 서버를 구현했습니다.",
+      srcRef: "github.com/example/chat-server · README.md",
+      srcQuote: "WebSocket과 Redis Pub/Sub으로 다중 서버 환경에서도 메시지를 브로드캐스트합니다.",
     },
   ],
   gaps: [
     {
-      target: "테스트 자동화",
-      title: "E2E 테스트 파이프라인 구축",
-      features: "화이트보드 프로젝트에 Playwright 핵심 시나리오 5개 작성 + PR마다 자동 실행",
-      duration: "2주 (주말 기준 4일)",
-      deliverables: "테스트 코드, 커버리지 리포트, 트러블슈팅 블로그 1편",
+      target: "AWS",
+      title: "Spring Boot 애플리케이션 AWS 배포 프로젝트",
+      features: "Docker 이미지 빌드, EC2 배포, 환경 변수 관리",
+      duration: "3~5일",
+      deliverables: "배포된 서비스 URL, 배포 문서",
     },
     {
-      target: "CI/CD",
-      title: "개인 프로젝트 자동 배포 구축",
-      features: "GitHub Actions로 빌드→테스트→배포 워크플로 구성, 스테이징/프로덕션 분리",
-      duration: "1주",
-      deliverables: "워크플로 YAML, 배포 아키텍처 다이어그램, README 문서화",
+      target: "Docker",
+      title: "컨테이너 기반 로컬 개발 환경 구성",
+      features: "Docker Compose, MySQL 컨테이너, 앱 컨테이너 연동",
+      duration: "2~3일",
+      deliverables: "docker-compose.yml, 실행 가이드",
     },
   ],
 };
@@ -138,24 +247,24 @@ export const mockResult: AnalysisResult = {
 export const mockHistory: HistoryEntry[] = [
   {
     id: "h1",
-    jobTitle: "핀테크 스타트업 A사 · 프론트엔드 개발자",
-    date: "2026. 7. 11",
-    projectCount: 4,
-    matchScore: 78,
+    jobTitle: "예시회사 · Backend Developer",
+    date: "2026-07-10",
+    projectCount: 3,
+    matchScore: 82,
     resultId: "r1",
   },
   {
     id: "h2",
-    jobTitle: "커머스 B사 · 웹 프론트엔드 (React)",
-    date: "2026. 7. 8",
-    projectCount: 3,
-    matchScore: 61,
+    jobTitle: "스타트업 A · Frontend Engineer",
+    date: "2026-07-08",
+    projectCount: 2,
+    matchScore: 65,
     resultId: "r2",
   },
 ];
 
 export const mockConnectedSources: ConnectedSource[] = [
   { id: "cs1", type: "GitHub", label: "github.com/yxxnxyxxn", connected: true },
-  { id: "cs2", type: "Notion", label: "notion.so/yeon-portfolio", connected: true },
-  { id: "cs3", type: "PDF", label: "포트폴리오_2026.pdf", connected: false },
+  { id: "cs2", type: "Notion", label: "notion.so/portfolio", connected: true },
+  { id: "cs3", type: "PDF", label: "resume_2026.pdf", connected: false },
 ];

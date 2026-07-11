@@ -1,39 +1,52 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import type { Project } from "../../types/project";
-import { mockProjects } from "../mock/mockData";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import type { EditableProject } from "../../types/project";
+import { fetchProjects, updateProject as apiUpdateProject } from "../../api/projects";
+import type { UpdateProjectPayload } from "../../api/projects";
 
 interface ProjectsContextValue {
-  projects: Project[];
+  projects: EditableProject[];
+  loading: boolean;
   activeCount: number;
-  setProjects: (projects: Project[]) => void;
-  updateProject: (id: string, patch: Partial<Project>) => void;
-  toggleExcluded: (id: string) => void;
-  addStack: (id: string, stack: string) => void;
+  updateProject: (projectId: number, patch: UpdateProjectPayload) => void;
+  toggleExcluded: (projectId: number) => void;
+  addSkill: (projectId: number, skill: string) => void;
 }
 
 const ProjectsContext = createContext<ProjectsContextValue | null>(null);
 
 export function ProjectsProvider({ children }: { children: ReactNode }) {
-  const [projects, setProjects] = useState<Project[]>(mockProjects);
+  const [projects, setProjects] = useState<EditableProject[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const updateProject = (id: string, patch: Partial<Project>) =>
-    setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  useEffect(() => {
+    // api-spec.md #7 GET /projects
+    fetchProjects().then((data) => {
+      setProjects(data.map((p) => ({ ...p, excluded: false })));
+      setLoading(false);
+    });
+  }, []);
 
-  const toggleExcluded = (id: string) =>
+  const updateProject = (projectId: number, patch: UpdateProjectPayload) => {
+    setProjects((prev) => prev.map((p) => (p.projectId === projectId ? { ...p, ...patch } : p)));
+    // api-spec.md #8 PATCH /projects/{projectId}
+    apiUpdateProject(projectId, patch);
+  };
+
+  const toggleExcluded = (projectId: number) =>
     setProjects((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, excluded: !p.excluded } : p)),
+      prev.map((p) => (p.projectId === projectId ? { ...p, excluded: !p.excluded } : p)),
     );
 
-  const addStack = (id: string, stack: string) =>
+  const addSkill = (projectId: number, skill: string) =>
     setProjects((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, stack: [...p.stack, stack] } : p)),
+      prev.map((p) => (p.projectId === projectId ? { ...p, skills: [...p.skills, skill] } : p)),
     );
 
   const activeCount = useMemo(() => projects.filter((p) => !p.excluded).length, [projects]);
 
   return (
     <ProjectsContext.Provider
-      value={{ projects, activeCount, setProjects, updateProject, toggleExcluded, addStack }}
+      value={{ projects, loading, activeCount, updateProject, toggleExcluded, addSkill }}
     >
       {children}
     </ProjectsContext.Provider>

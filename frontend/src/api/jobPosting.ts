@@ -1,22 +1,18 @@
-import type { JobPostingMode, ParsedJobPosting } from "../types/jobPosting";
+import type { JobPosting, JobPostingInputType } from "../types/jobPosting";
 
 export interface RegisterJobPostingPayload {
-  mode: JobPostingMode;
-  url?: string;
-  images?: File[];
-  rawText?: string;
+  inputType: JobPostingInputType;
+  content: string;
 }
 
-// TODO: POST /job-postings — URL/이미지/텍스트를 구조화 JSON(회사·직무·요구역량)으로 파싱
-export async function registerJobPosting(
-  _payload: RegisterJobPostingPayload,
-): Promise<ParsedJobPosting> {
+// api-spec.md #9 POST /job-postings
+// URL 인식 실패(JOB_POSTING_URL_FETCH_FAILED) 시 프론트는 텍스트 입력으로 안내해야 함
+export async function registerJobPosting(payload: RegisterJobPostingPayload): Promise<JobPosting> {
   await new Promise((r) => setTimeout(r, 300));
   return {
-    company: "핀테크 스타트업 A사",
-    role: "프론트엔드 개발자",
-    responsibilities: [],
-    requirements: [],
-    preferred: [],
+    jobPostingId: 201,
+    inputType: payload.inputType,
+    rawText: payload.content,
+    status: "completed",
   };
 }

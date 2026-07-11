@@ -1,22 +1,33 @@
-export interface AnalysisProgressEvent {
-  progress: number;
-  currentStep: number;
-}
+import type { JobResponse } from "../types/job";
+import type { AnalysisJobResult } from "../types/analysis";
+import { mockParsedJobPosting, mockRecommendedProjects } from "../features/mock/mockData";
 
-// TODO: POST /analysis/run — 활성 프로젝트 id 목록으로 분석 시작, 분석 job id 반환
-export async function startAnalysis(_projectIds: string[]): Promise<{ jobId: string }> {
+// api-spec.md #10 POST /job-postings/{jobPostingId}/analysis-jobs
+export async function startAnalysisJob(
+  _jobPostingId: number,
+  recommendationLimit = 3,
+): Promise<JobResponse> {
   await new Promise((r) => setTimeout(r, 200));
-  return { jobId: "mock-job-1" };
+  void recommendationLimit;
+  return {
+    jobId: 301,
+    status: "pending",
+    message: "채용공고 분석 작업이 생성되었습니다.",
+    resultId: null,
+    error: null,
+  };
 }
 
-// TODO: GET /analysis/:jobId/stream — SSE로 진행률 구독 (권장). 폴백은 폴링 GET /analysis/:jobId
-export function subscribeAnalysisProgress(
-  _jobId: string,
-  _onProgress: (event: AnalysisProgressEvent) => void,
-): () => void {
-  // 실제 구현 예시:
-  // const es = new EventSource(`${API_BASE_URL}/analysis/${jobId}/stream`);
-  // es.onmessage = (e) => onProgress(JSON.parse(e.data));
-  // return () => es.close();
-  return () => {};
+// api-spec.md #11 GET /analysis-jobs/{jobId}
+export async function getAnalysisJob(_jobId: number): Promise<AnalysisJobResult> {
+  await new Promise((r) => setTimeout(r, 200));
+  return {
+    jobId: 301,
+    status: "completed",
+    message: "채용공고 분석이 완료되었습니다.",
+    resultId: 401,
+    error: null,
+    jobPosting: mockParsedJobPosting,
+    recommendedProjects: mockRecommendedProjects,
+  };
 }
