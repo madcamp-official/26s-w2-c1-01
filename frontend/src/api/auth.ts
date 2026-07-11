@@ -1,18 +1,24 @@
-import { apiRequest } from "./client";
-import type { GithubCallbackResponse, GithubLoginResponse, User } from "../types/auth";
+import type { User } from "../types/user";
+import { mockUser } from "../features/mock/mockData";
 
-// docs/api-spec.md 2. GitHub 로그인 시작
-export function getGithubLoginUrl() {
-  return apiRequest<GithubLoginResponse>("/auth/github/login");
+export interface LoginPayload {
+  email: string;
+  password: string;
 }
 
-// docs/api-spec.md 3. GitHub 로그인 콜백
-export function exchangeGithubCode(code: string) {
-  const params = new URLSearchParams({ code });
-  return apiRequest<GithubCallbackResponse>(`/auth/github/callback?${params.toString()}`);
+// TODO: replace with real POST /auth/login call. For now, any input is accepted (mock auth).
+export async function login(_payload: LoginPayload): Promise<User> {
+  await new Promise((r) => setTimeout(r, 300));
+  return mockUser;
 }
 
-// docs/api-spec.md 4. 내 정보 조회
-export function fetchMe(accessToken: string) {
-  return apiRequest<User>("/me", { accessToken });
+// TODO: replace with real OAuth redirect flow (GitHub/Google)
+export async function loginWithProvider(_provider: "github" | "google"): Promise<User> {
+  await new Promise((r) => setTimeout(r, 300));
+  return mockUser;
+}
+
+// TODO: call POST /auth/logout to invalidate session
+export async function logout(): Promise<void> {
+  await new Promise((r) => setTimeout(r, 100));
 }
