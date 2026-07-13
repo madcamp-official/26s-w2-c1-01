@@ -4,6 +4,7 @@ from typing import Any
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
+from pgvector.sqlalchemy import Vector
 
 from app.db.base import Base
 
@@ -37,6 +38,8 @@ class JobPosting(Base):
         nullable=False,
         server_default=text("'[]'::jsonb"),
     )
+    content_summary: Mapped[str | None] = mapped_column(Text)
+    content_embedding: Mapped[list[float] | None] = mapped_column(Vector(1536))
     status: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -1,4 +1,5 @@
 import re
+import os
 from html import unescape
 from html.parser import HTMLParser
 from urllib.parse import urlparse
@@ -12,6 +13,7 @@ from app.db.database import get_db
 from app.dependencies.auth_helper import get_current_user
 from app.models.job_posting import JobPosting
 from app.models.user import User
+from app.services.embedding_service import create_embedding
 from app.services.llm_pipeline import (
     build_job_posting_structure_payload,
     structure_job_posting_without_llm,
@@ -88,6 +90,37 @@ def _extract_visible_text(html: str) -> str:
     return text[:MAX_RAW_TEXT_LENGTH]
 
 
+def _job_posting_summary_text(raw_text: str, structured_job_posting: dict) -> str:
+    parts: list[str] = []
+    role = structured_job_posting.get("role")
+    if isinstance(role, str) and role:
+        parts.append(f"Role: {role}")
+
+    required_skills = structured_job_posting.get("requiredSkills") or []
+    if required_skills:
+        parts.append(f"Required skills: {', '.join(required_skills)}")
+
+    preferred_skills = structured_job_posting.get("preferredSkills") or []
+    if preferred_skills:
+        parts.append(f"Preferred skills: {', '.join(preferred_skills)}")
+
+    competencies = structured_job_posting.get("competencies") or []
+    if competencies:
+        parts.append(f"Competencies: {', '.join(competencies)}")
+
+    parts.append(f"Job posting excerpt: {raw_text[:3000]}")
+    return "\n".join(parts)
+
+
+def _try_create_embedding(text: str) -> list[float] | None:
+    if not os.getenv("OPENAI_API_KEY"):
+        return None
+    try:
+        return create_embedding(text)
+    except Exception:
+        return None
+
+
 async def _fetch_job_posting_text(url: str) -> str:
     _validate_url(url)
     try:
@@ -159,6 +192,8 @@ async def create_job_posting(
     raw_text = await _fetch_job_posting_text(content) if input_type == "url" else content
     build_job_posting_structure_payload(raw_text)
     structured_job_posting = structure_job_posting_without_llm(raw_text)
+    content_summary = _job_posting_summary_text(raw_text, structured_job_posting)
+    content_embedding = _try_create_embedding(content_summary)
 
     job_posting = JobPosting(
         user_id=current_user.id,
@@ -169,6 +204,8 @@ async def create_job_posting(
         required_skills=structured_job_posting["requiredSkills"],
         preferred_skills=structured_job_posting["preferredSkills"],
         competencies=structured_job_posting["competencies"],
+        content_summary=content_summary,
+        content_embedding=content_embedding,
         status="completed",
     )
     db.add(job_posting)

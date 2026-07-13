@@ -4,6 +4,7 @@ from typing import Any
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
+from pgvector.sqlalchemy import Vector
 
 from app.db.base import Base
 
@@ -30,6 +31,8 @@ class Project(Base):
         nullable=False,
         server_default=text("'[]'::jsonb"),
     )
+    summary_text: Mapped[str | None] = mapped_column(Text)
+    summary_embedding: Mapped[list[float] | None] = mapped_column(Vector(1536))
     source_type: Mapped[str | None] = mapped_column(Text)
     source_url: Mapped[str | None] = mapped_column(Text)
     is_archived: Mapped[bool] = mapped_column(
