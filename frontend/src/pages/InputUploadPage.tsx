@@ -6,6 +6,7 @@ import { Button } from "../components/Button";
 import { SegmentedControl } from "../components/SegmentedControl";
 import { useJobPosting } from "../features/jobPosting/useJobPosting";
 import { useAuth } from "../features/auth/useAuth";
+import { useProjects } from "../features/projects/useProjects";
 import { startGithubCollection } from "../api/github";
 import { registerJobPosting } from "../api/jobPosting";
 import { ApiError } from "../api/client";
@@ -19,13 +20,17 @@ const jobModeOptions = [
 export function InputUploadPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { projects } = useProjects();
+  const hasExistingProjects = projects.length > 0;
   const { state: jobState, setMode, setUrl, setRawText } = useJobPosting();
-  const [agreedToAnalyze, setAgreedToAnalyze] = useState(true);
+  const [agreedToAnalyze, setAgreedToAnalyze] = useState(() => !hasExistingProjects);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const content = jobState.mode === "url" ? jobState.url : jobState.rawText;
-  const canSubmit = agreedToAnalyze && content.trim().length > 0 && !submitting;
+  // 이미 수집된 프로젝트가 있으면 체크박스는 "새 레포 추가 수집" 여부일 뿐, 필수 동의가 아니에요.
+  const willCollect = hasExistingProjects ? agreedToAnalyze : true;
+  const canSubmit = (hasExistingProjects || agreedToAnalyze) && content.trim().length > 0 && !submitting;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -33,8 +38,10 @@ export function InputUploadPage() {
     setErrorMessage(null);
 
     try {
-      // api-spec.md #5 POST /github/collection-jobs
-      await startGithubCollection(agreedToAnalyze as true);
+      if (willCollect) {
+        // api-spec.md #5 POST /github/collection-jobs
+        await startGithubCollection(true);
+      }
       // api-spec.md #9 POST /job-postings
       const jobPosting = await registerJobPosting({ inputType: jobState.mode, content: content.trim() });
       navigate("/projects", { state: { jobPostingId: jobPosting.jobPostingId } });
@@ -71,7 +78,11 @@ export function InputUploadPage() {
             <span className="input-card-title">GitHub 프로젝트 수집</span>
             <span className="input-step-badge">STEP 1</span>
           </div>
-          <p className="input-card-desc">로그인한 GitHub 계정의 repository와 README를 수집해 프로젝트 후보를 만들어요.</p>
+          <p className="input-card-desc">
+            {hasExistingProjects
+              ? "이미 수집된 프로젝트가 있어요. 기존에 수정한 내용은 그대로 유지돼요."
+              : "로그인한 GitHub 계정의 repository와 README를 수집해 프로젝트 후보를 만들어요."}
+          </p>
 
           <div className="input-github-row">
             <span className="input-github-row__badge">GitHub</span>
@@ -91,8 +102,14 @@ export function InputUploadPage() {
               {agreedToAnalyze ? "✓" : ""}
             </span>
             <div>
-              <p className="input-consent-row__title">공개 repository 분석에 동의합니다</p>
-              <p className="input-consent-row__desc">수집한 내용은 프로젝트 후보 생성과 이력서 추천에만 사용돼요.</p>
+              <p className="input-consent-row__title">
+                {hasExistingProjects ? "새로 추가된 레포가 있어요" : "공개 repository 분석에 동의합니다"}
+              </p>
+              <p className="input-consent-row__desc">
+                {hasExistingProjects
+                  ? "체크하면 새로 추가된 레포만 찾아서 수집해요. 이미 수집한 프로젝트는 다시 건드리지 않아요."
+                  : "수집한 내용은 프로젝트 후보 생성과 이력서 추천에만 사용돼요."}
+              </p>
             </div>
           </div>
         </Card>
@@ -144,7 +161,13 @@ export function InputUploadPage() {
           disabled={!canSubmit}
           onClick={handleSubmit}
         >
-          {submitting ? "수집하는 중..." : "프로젝트 수집하고 확인하기 →"}
+          {submitting
+            ? willCollect
+              ? "수집하는 중..."
+              : "등록하는 중..."
+            : willCollect
+              ? "프로젝트 수집하고 확인하기 →"
+              : "채용공고 등록하고 확인하기 →"}
         </Button>
       </div>
     </>
