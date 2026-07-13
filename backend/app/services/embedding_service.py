@@ -1,18 +1,29 @@
-from functools import lru_cache
+import os
 
-from openai import OpenAI
+import httpx
 
-EMBEDDING_MODEL = "text-embedding-3-small"
+OPENROUTER_EMBEDDINGS_URL = "https://openrouter.ai/api/v1/embeddings"
+EMBEDDING_MODEL = "openai/text-embedding-3-small"
 
 
-@lru_cache
-def get_openai_client() -> OpenAI:
-    return OpenAI()
+class EmbeddingError(Exception):
+    pass
 
 
 def create_embedding(text: str) -> list[float]:
-    response = get_openai_client().embeddings.create(
-        model=EMBEDDING_MODEL,
-        input=text,
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        raise EmbeddingError("OPENROUTER_API_KEY is not set.")
+
+    response = httpx.post(
+        OPENROUTER_EMBEDDINGS_URL,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json={"model": EMBEDDING_MODEL, "input": text},
+        timeout=30.0,
     )
-    return response.data[0].embedding
+    response.raise_for_status()
+    body = response.json()
+    return body["data"][0]["embedding"]
