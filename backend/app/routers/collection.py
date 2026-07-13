@@ -22,6 +22,7 @@ from app.models.evidence import Evidence
 from app.models.portfolio import PortfolioSource, ProjectSourceLink, SourceDocument
 from app.models.project import Project
 from app.models.user import OAuthAccount, User
+from app.services.embedding_service import create_embedding
 from app.services.llm_pipeline import enrich_project_via_llm
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
@@ -268,6 +269,36 @@ def _evidence_content(repo: dict[str, Any], readme_text: str) -> str:
     return f"GitHub repository: {repo.get('full_name') or repo.get('name')}"
 
 
+def _project_summary_text(repo: dict[str, Any], readme_text: str) -> str:
+    name = repo.get("name") or repo.get("full_name") or "GitHub repository"
+    description = repo.get("description")
+    language = repo.get("language")
+    topics = repo.get("topics")
+
+    parts = [f"Project: {name}"]
+    if isinstance(description, str) and description.strip():
+        parts.append(f"Description: {description.strip()}")
+    if isinstance(language, str) and language.strip():
+        parts.append(f"Primary language: {language.strip()}")
+    if isinstance(topics, list):
+        topic_values = [topic for topic in topics if isinstance(topic, str) and topic.strip()]
+        if topic_values:
+            parts.append(f"Topics: {', '.join(topic_values)}")
+    if readme_text.strip():
+        parts.append(f"README excerpt: {readme_text.strip()[:2000]}")
+
+    return "\n".join(parts)
+
+
+def _try_create_embedding(text: str) -> list[float] | None:
+    if not os.getenv("OPENAI_API_KEY"):
+        return None
+    try:
+        return create_embedding(text)
+    except Exception:
+        return None
+
+
 def _upsert_project(current_user: User, repo: dict[str, Any], readme_text: str, db: Session) -> Project:
     source_url = repo.get("html_url")
     project = db.scalar(
@@ -281,6 +312,8 @@ def _upsert_project(current_user: User, repo: dict[str, Any], readme_text: str, 
     name = repo.get("name") or repo.get("full_name") or "GitHub repository"
     description = repo.get("description")
     skills = _skills_from_repo(repo)
+    summary_text = _project_summary_text(repo, readme_text)
+    summary_embedding = _try_create_embedding(summary_text)
 
     if project is None:
         project = Project(
@@ -290,6 +323,8 @@ def _upsert_project(current_user: User, repo: dict[str, Any], readme_text: str, 
             role=None,
             skills=skills,
             achievements=[],
+            summary_text=summary_text,
+            summary_embedding=summary_embedding,
             source_type="github",
             source_url=source_url if isinstance(source_url, str) else None,
         )
@@ -300,6 +335,9 @@ def _upsert_project(current_user: User, repo: dict[str, Any], readme_text: str, 
     project.title = str(name)
     project.description = description if isinstance(description, str) else project.description
     project.skills = skills
+    project.summary_text = summary_text
+    if summary_embedding is not None:
+        project.summary_embedding = summary_embedding
     project.source_type = "github"
     project.source_url = source_url if isinstance(source_url, str) else project.source_url
     project.is_archived = False

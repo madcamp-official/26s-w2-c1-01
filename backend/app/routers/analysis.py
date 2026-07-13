@@ -13,9 +13,9 @@ from app.models.project import Project
 from app.models.user import User
 from app.services.llm_pipeline import (
     build_project_recommendation_payload,
-    recommend_projects_without_llm,
     validate_project_recommendations,
 )
+from app.services.recommendation_service import recommend_projects_hybrid
 
 router = APIRouter(tags=["analysis"])
 
@@ -141,7 +141,9 @@ def create_analysis_job(
         recommendation_limit,
     )
     recommendations = validate_project_recommendations(
-        recommend_projects_without_llm(
+        recommend_projects_hybrid(
+            db,
+            current_user.id,
             job_posting,
             projects,
             evidence_by_project,
