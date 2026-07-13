@@ -79,6 +79,64 @@
   resize: vertical;
 }
 
+.input-image-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1.5px dashed var(--border-dashed);
+  border-radius: var(--radius-md);
+  padding: 22px 20px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.input-image-upload:hover {
+  background: var(--primary-tint-soft);
+  border-color: var(--primary);
+}
+.input-image-upload__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.input-image-upload__title {
+  font-weight: 800;
+  font-size: 16px;
+  color: var(--ink);
+}
+.input-image-upload__desc {
+  font-size: 13px;
+  color: var(--ink-sub);
+  line-height: 1.5;
+}
+.input-image-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+.input-image-preview-item {
+  margin: 0;
+  min-width: 0;
+}
+.input-image-preview-item figcaption {
+  margin-top: 6px;
+  color: var(--ink-sub);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.input-image-preview {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+
 .input-hint {
   display: flex;
   align-items: center;

@@ -43,7 +43,13 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   if (!res.ok) {
     // api-spec.md #공통 에러 응답
     const body = await res.json().catch(() => null);
-    throw new ApiError(body?.message ?? `Request failed: ${path}`, res.status, body?.error?.code);
+    const detail = body?.detail;
+    const message =
+      body?.message ??
+      (typeof detail === "string" ? detail : detail?.message) ??
+      `Request failed: ${path}`;
+    const code = body?.error?.code ?? detail?.error?.code;
+    throw new ApiError(message, res.status, code);
   }
   return res.json() as Promise<T>;
 }

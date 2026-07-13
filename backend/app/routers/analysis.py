@@ -52,7 +52,89 @@ def _job_posting_response(job_posting: JobPosting) -> dict:
     }
 
 
+def _json_strings(value) -> list[str]:
+    if not isinstance(value, list):
+        return []
+
+    strings: list[str] = []
+    for item in value:
+        if isinstance(item, str) and item.strip():
+            strings.append(item.strip())
+        elif isinstance(item, dict):
+            name = item.get("name") or item.get("skill") or item.get("title")
+            if isinstance(name, str) and name.strip():
+                strings.append(name.strip())
+    return list(dict.fromkeys(strings))
+
+
+def _project_summary_evidence(project: Project) -> str:
+    parts: list[str] = []
+    if project.description:
+        parts.append(project.description)
+    skills = _json_strings(project.skills)
+    if skills:
+        parts.append(f"기술 스택: {', '.join(skills)}")
+    achievements = _json_strings(project.achievements)
+    if achievements:
+        parts.append(f"성과/구현: {'; '.join(achievements[:3])}")
+    return " ".join(parts) or f"{project.title} 프로젝트 정보"
+
+
+def _match_evidence_response(
+    job_posting: JobPosting,
+    recommended_project: RecommendedProject,
+    project: Project,
+) -> list[dict]:
+    evidence_items: list[dict] = []
+    project_skills = _json_strings(project.skills)
+    project_summary = _project_summary_evidence(project)
+
+    for skill in _json_strings(recommended_project.matched_skills):
+        if any(skill.casefold() == project_skill.casefold() for project_skill in project_skills):
+            project_evidence = f"{project.title}의 기술 스택에 {skill}이 포함되어 있습니다."
+            source = "프로젝트 기술 스택"
+        else:
+            project_evidence = project_summary
+            source = "프로젝트 요약"
+
+        evidence_items.append(
+            {
+                "requirement": skill,
+                "matchType": "skill",
+                "source": source,
+                "projectEvidence": project_evidence,
+                "explanation": f"공고 요구 기술인 {skill}을 이 프로젝트에서 확인할 수 있어요.",
+            }
+        )
+
+    if project_summary:
+        role = job_posting.role or "공고"
+        evidence_items.append(
+            {
+                "requirement": role,
+                "matchType": "semantic",
+                "source": "프로젝트 설명/성과 요약",
+                "projectEvidence": project_summary,
+                "explanation": recommended_project.reason,
+            }
+        )
+
+    for skill in _json_strings(recommended_project.missing_skills):
+        evidence_items.append(
+            {
+                "requirement": skill,
+                "matchType": "missing",
+                "source": "프로젝트 기술 스택/요약",
+                "projectEvidence": f"{project.title}에서 {skill} 근거는 아직 확인되지 않았습니다.",
+                "explanation": "공고의 필수 요구사항 중 수집된 프로젝트 정보에서 확인되지 않은 항목이에요.",
+            }
+        )
+
+    return evidence_items
+
+
 def _recommended_project_response(
+    job_posting: JobPosting,
     recommended_project: RecommendedProject,
     project: Project,
     evidence_ids: list[int],
@@ -64,6 +146,7 @@ def _recommended_project_response(
         "reason": recommended_project.reason,
         "matchedSkills": recommended_project.matched_skills,
         "missingSkills": recommended_project.missing_skills,
+        "matchEvidence": _match_evidence_response(job_posting, recommended_project, project),
         "evidenceIds": evidence_ids,
     }
 
@@ -256,6 +339,7 @@ def get_analysis_job(
 
         recommended_project_responses.append(
             _recommended_project_response(
+                job_posting,
                 recommended_project,
                 project,
                 linked_evidence_ids,

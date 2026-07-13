@@ -91,12 +91,33 @@
   border-radius: 0 12px 12px 0;
   padding: 14px 18px;
 }
+.evidence-card__quote--missing {
+  background: #fff7ed;
+  border-left-color: var(--accent);
+}
+.evidence-card__quote-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
 
 .evidence-card__quote-ref {
-  margin: 0 0 6px;
+  margin: 0;
   font-size: 12px;
   font-weight: 800;
   color: var(--primary);
+}
+.evidence-card__quote--missing .evidence-card__quote-ref {
+  color: var(--accent-ink);
+}
+.evidence-card__quote-source {
+  flex: none;
+  color: var(--ink-sub);
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .evidence-card__quote-text {
@@ -104,5 +125,11 @@
   font-size: 13.5px;
   color: var(--gap-body-ink);
   line-height: 1.6;
-  font-style: italic;
+}
+
+.evidence-card__quote-explanation {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--ink-sub);
+  line-height: 1.5;
 }

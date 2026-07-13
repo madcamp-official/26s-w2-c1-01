@@ -55,6 +55,15 @@ export function RecommendationResultPage() {
   }
 
   const { jobPosting } = analysis;
+  const matchEvidenceForSection = (projectId?: number) => {
+    if (typeof projectId === "number") {
+      return analysis.recommendedProjects.find((project) => project.projectId === projectId)?.matchEvidence ?? [];
+    }
+    return analysis.recommendedProjects
+      .flatMap((project) => project.matchEvidence ?? [])
+      .filter((item) => item.matchType !== "missing")
+      .slice(0, 8);
+  };
 
   return (
     <>
@@ -173,8 +182,8 @@ export function RecommendationResultPage() {
         <Card style={{ marginBottom: 20 }}>
           <p className="result-section-title">이력서 초안</p>
           <p className="result-section-subtitle">
-            섹션별 초안이에요. 모든 문장은 수집된 원문에 근거해요.{" "}
-            <b style={{ color: "var(--primary)" }}>근거 보기</b>로 출처를 확인하세요.
+            섹션별 초안이에요.{" "}
+            <b style={{ color: "var(--primary)" }}>근거 보기</b>에서 공고 요구사항과 프로젝트가 어떻게 맞는지 확인하세요.
           </p>
           {resumeLoading || !resume ? (
             <p style={{ color: "var(--ink-sub)", fontSize: 14 }}>이력서 초안을 만들고 있어요...</p>
@@ -185,6 +194,7 @@ export function RecommendationResultPage() {
                   <EvidenceAccordion
                     key={`${section.heading}-${i}`}
                     section={section}
+                    matchEvidence={matchEvidenceForSection(section.projectId)}
                     open={openSectionIndex === i}
                     onToggle={() => setOpenSectionIndex((prev) => (prev === i ? null : i))}
                   />

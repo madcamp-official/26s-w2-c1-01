@@ -1,28 +1,23 @@
-import { useState } from "react";
+import type { MatchEvidence } from "../types/analysis";
 import type { ResumeSection } from "../types/resume";
-import type { Evidence } from "../types/evidence";
-import { getEvidence } from "../api/evidence";
 import "./EvidenceAccordion.css";
 
 interface EvidenceAccordionProps {
   section: ResumeSection;
+  matchEvidence: MatchEvidence[];
   open: boolean;
   onToggle: () => void;
 }
 
-export function EvidenceAccordion({ section, open, onToggle }: EvidenceAccordionProps) {
-  const [evidences, setEvidences] = useState<Evidence[] | null>(null);
-  const [loading, setLoading] = useState(false);
+const matchTypeLabel: Record<MatchEvidence["matchType"], string> = {
+  skill: "일치 근거",
+  semantic: "맥락 근거",
+  missing: "보완 필요",
+};
 
-  const handleToggle = async () => {
+export function EvidenceAccordion({ section, matchEvidence, open, onToggle }: EvidenceAccordionProps) {
+  const handleToggle = () => {
     onToggle();
-    if (!open && evidences === null && section.evidenceIds.length > 0) {
-      setLoading(true);
-      // api-spec.md #15 GET /evidences/{evidenceId}
-      const results = await Promise.all(section.evidenceIds.map((id) => getEvidence(id)));
-      setEvidences(results);
-      setLoading(false);
-    }
   };
 
   const handleCopy = () => {
@@ -50,11 +45,22 @@ export function EvidenceAccordion({ section, open, onToggle }: EvidenceAccordion
       </div>
       {open && (
         <div className="evidence-card__quote-list">
-          {loading && <p className="evidence-card__quote-loading">근거를 불러오는 중이에요...</p>}
-          {evidences?.map((ev) => (
-            <div className="evidence-card__quote" key={ev.evidenceId}>
-              <p className="evidence-card__quote-ref">원문 근거 · {ev.title}</p>
-              <p className="evidence-card__quote-text">"{ev.content}"</p>
+          {matchEvidence.length === 0 && (
+            <p className="evidence-card__quote-loading">이 섹션에 연결된 매칭 근거가 아직 없어요.</p>
+          )}
+          {matchEvidence.map((item, index) => (
+            <div
+              className={`evidence-card__quote evidence-card__quote--${item.matchType}`}
+              key={`${item.requirement}-${item.matchType}-${index}`}
+            >
+              <div className="evidence-card__quote-head">
+                <span className="evidence-card__quote-ref">
+                  {matchTypeLabel[item.matchType]} · {item.requirement}
+                </span>
+                <span className="evidence-card__quote-source">{item.source}</span>
+              </div>
+              <p className="evidence-card__quote-text">{item.projectEvidence}</p>
+              <p className="evidence-card__quote-explanation">{item.explanation}</p>
             </div>
           ))}
         </div>

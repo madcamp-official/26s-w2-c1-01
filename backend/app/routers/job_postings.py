@@ -1,4 +1,5 @@
 import base64
+import binascii
 import re
 import os
 from html import unescape
@@ -32,6 +33,7 @@ MAX_IMAGE_BYTES = 8_000_000
 IMAGE_SRC_PATTERN = re.compile(
     r'<img[^>]*(?:data-src|data-original|src)="([^"]+)"', re.IGNORECASE
 )
+IMAGE_DATA_URL_PATTERN = re.compile(r"^data:(image/[a-zA-Z0-9.+-]+);base64,(.+)$", re.DOTALL)
 _NON_CONTENT_IMAGE_HINTS = (
     "logo", "icon", "sprite", "banner", "gtm", "adserver", "button", "btn_",
     "favicon", "blank.gif", "spacer", "profile", "avatar", "share_default",
@@ -40,7 +42,7 @@ _NON_CONTENT_IMAGE_HINTS = (
 
 class JobPostingCreateRequest(BaseModel):
     inputType: str
-    content: str
+    content: str | list[str]
 
 
 class _VisibleTextParser(HTMLParser):
@@ -92,6 +94,93 @@ def _validate_url(url: str) -> None:
         )
 
 
+def _validate_image_data_url(data_url: str) -> None:
+    match = IMAGE_DATA_URL_PATTERN.match(data_url)
+    if match is None:
+        raise HTTPException(
+            status_code=400,
+            detail=_error_detail(
+                "JOB_POSTING_IMAGE_INVALID",
+                "The uploaded job posting image is not a valid image data URL.",
+            ),
+        )
+
+    content_type, encoded = match.groups()
+    if content_type not in {"image/png", "image/jpeg", "image/jpg", "image/webp"}:
+        raise HTTPException(
+            status_code=400,
+            detail=_error_detail(
+                "JOB_POSTING_IMAGE_INVALID",
+                "The uploaded job posting image type is not supported.",
+            ),
+        )
+
+    try:
+        image_bytes = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=_error_detail(
+                "JOB_POSTING_IMAGE_INVALID",
+                "The uploaded job posting image could not be decoded.",
+            ),
+        ) from exc
+
+    if not image_bytes or len(image_bytes) > MAX_IMAGE_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=_error_detail(
+                "JOB_POSTING_IMAGE_INVALID",
+                "The uploaded job posting image must be 8MB or smaller.",
+            ),
+        )
+
+
+def _image_contents_from_request(content: str | list[str]) -> list[str]:
+    image_data_urls = [content] if isinstance(content, str) else content
+    image_data_urls = [image_data_url.strip() for image_data_url in image_data_urls if image_data_url.strip()]
+    if not image_data_urls:
+        raise HTTPException(
+            status_code=400,
+            detail=_error_detail(
+                "JOB_POSTING_TEXT_REQUIRED",
+                "content must not be empty.",
+            ),
+        )
+    if len(image_data_urls) > MAX_IMAGE_CANDIDATES:
+        raise HTTPException(
+            status_code=400,
+            detail=_error_detail(
+                "JOB_POSTING_IMAGE_INVALID",
+                f"The uploaded job posting images must be {MAX_IMAGE_CANDIDATES} or fewer.",
+            ),
+        )
+    for image_data_url in image_data_urls:
+        _validate_image_data_url(image_data_url)
+    return image_data_urls
+
+
+def _text_content_from_request(content: str | list[str]) -> str:
+    if not isinstance(content, str):
+        raise HTTPException(
+            status_code=400,
+            detail=_error_detail(
+                "JOB_POSTING_TEXT_REQUIRED",
+                "content must be text for this input type.",
+            ),
+        )
+    content = content.strip()
+    if not content:
+        raise HTTPException(
+            status_code=400,
+            detail=_error_detail(
+                "JOB_POSTING_TEXT_REQUIRED",
+                "content must not be empty.",
+            ),
+        )
+    return content
+
+
 def _extract_visible_text(html: str) -> str:
     parser = _VisibleTextParser()
     parser.feed(html)
@@ -122,6 +211,22 @@ def _job_posting_summary_text(raw_text: str, structured_job_posting: dict) -> st
 
     parts.append(f"Job posting excerpt: {raw_text[:3000]}")
     return "\n".join(parts)
+
+
+def _has_enough_structured_job_posting_signal(structured_job_posting: dict) -> bool:
+    required_skills = structured_job_posting.get("requiredSkills") or []
+    preferred_skills = structured_job_posting.get("preferredSkills") or []
+    return bool(required_skills or preferred_skills)
+
+
+def _raise_insufficient_url_content() -> None:
+    raise HTTPException(
+        status_code=400,
+        detail=_error_detail(
+            "JOB_POSTING_URL_INSUFFICIENT",
+            "The server could not extract enough job posting requirements from the URL.",
+        ),
+    )
 
 
 def _try_create_embedding(text: str) -> list[float] | None:
@@ -238,32 +343,40 @@ async def create_job_posting(
     db: Session = Depends(get_db),
 ):
     input_type = request.inputType.strip().lower()
-    content = request.content.strip()
 
-    if input_type not in {"url", "text"}:
+    if input_type not in {"url", "text", "image"}:
         raise HTTPException(
             status_code=400,
-            detail="inputType must be either 'url' or 'text'.",
-        )
-    if not content:
-        raise HTTPException(
-            status_code=400,
-            detail=_error_detail(
-                "JOB_POSTING_TEXT_REQUIRED",
-                "content must not be empty.",
-            ),
+            detail="inputType must be either 'url', 'text', or 'image'.",
         )
 
     structured_job_posting: dict | None = None
     if input_type == "url":
+        content = _text_content_from_request(request.content)
         raw_text, structured_job_posting = await _fetch_job_posting_content(content)
+    elif input_type == "image":
+        image_data_urls = _image_contents_from_request(request.content)
+        structured_job_posting = await structure_job_posting_from_image(image_data_urls)
+        if structured_job_posting is None:
+            raise HTTPException(
+                status_code=400,
+                detail=_error_detail(
+                    "JOB_POSTING_IMAGE_OCR_FAILED",
+                    "The server could not extract readable job posting text from the image.",
+                ),
+            )
+        raw_text = structured_job_posting["rawText"]
+        content = None
     else:
+        content = _text_content_from_request(request.content)
         raw_text = content
 
     if structured_job_posting is None:
         structured_job_posting = await structure_job_posting_via_llm(raw_text)
     if structured_job_posting is None:
         structured_job_posting = structure_job_posting_without_llm(raw_text)
+    if input_type == "url" and not _has_enough_structured_job_posting_signal(structured_job_posting):
+        _raise_insufficient_url_content()
     content_summary = _job_posting_summary_text(raw_text, structured_job_posting)
     content_embedding = _try_create_embedding(content_summary)
 

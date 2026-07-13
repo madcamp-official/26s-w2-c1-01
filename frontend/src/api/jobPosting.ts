@@ -3,7 +3,7 @@ import { apiFetch } from "./client";
 
 export interface RegisterJobPostingPayload {
   inputType: JobPostingInputType;
-  content: string;
+  content: string | string[];
 }
 
 // api-spec.md #9 POST /job-postings

@@ -8,6 +8,14 @@ export interface AnalysisStep {
   at: number;
 }
 
+export interface MatchEvidence {
+  requirement: string;
+  matchType: "skill" | "semantic" | "missing";
+  source: string;
+  projectEvidence: string;
+  explanation: string;
+}
+
 // 추천 프로젝트 — api-spec #11 recommendedProjects
 export interface RecommendedProject {
   projectId: number;
@@ -16,6 +24,7 @@ export interface RecommendedProject {
   reason: string;
   matchedSkills: string[];
   missingSkills: string[];
+  matchEvidence?: MatchEvidence[];
   evidenceIds: number[];
 }
 

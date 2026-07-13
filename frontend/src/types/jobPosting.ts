@@ -1,10 +1,12 @@
-export type JobPostingInputType = "url" | "text";
+export type JobPostingInputType = "url" | "text" | "image";
 export type JobPostingMode = JobPostingInputType;
 
 export interface JobPostingState {
   mode: JobPostingMode;
   url: string;
   rawText: string;
+  imageDataUrls: string[];
+  imageNames: string[];
 }
 
 export interface JobPosting {
