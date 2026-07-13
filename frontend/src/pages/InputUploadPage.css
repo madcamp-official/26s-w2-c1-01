@@ -189,6 +189,7 @@
   background: linear-gradient(to top, rgba(245, 242, 242, 1) 40%, rgba(245, 242, 242, 0));
 }
 .input-fixed-cta__btn {
+  display: block;
   width: min(560px, 100%);
   margin: 0 auto;
 }
