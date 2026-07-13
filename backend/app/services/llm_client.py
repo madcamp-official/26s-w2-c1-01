@@ -21,11 +21,21 @@ class LLMError(Exception):
         self.message = message
 
 
+_JSON_FENCE_BLOCK_PATTERN = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.IGNORECASE | re.DOTALL)
 _JSON_FENCE_PATTERN = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 
 
 def _strip_json_fence(content: str) -> str:
-    return _JSON_FENCE_PATTERN.sub("", content.strip()).strip()
+    content = content.strip()
+    fence_match = _JSON_FENCE_BLOCK_PATTERN.search(content)
+    if fence_match:
+        return fence_match.group(1).strip()
+    stripped = _JSON_FENCE_PATTERN.sub("", content).strip()
+    start = stripped.find("{")
+    end = stripped.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return stripped[start : end + 1]
+    return stripped
 
 
 def _api_key() -> str:
@@ -39,9 +49,18 @@ async def complete_json(
     system_prompt: str,
     user_prompt: str,
     timeout: float = DEFAULT_TIMEOUT,
+    image_data_urls: list[str] | None = None,
 ) -> dict[str, Any]:
     api_key = _api_key()
     model = os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL)
+
+    if image_data_urls:
+        user_content: Any = [{"type": "text", "text": user_prompt}] + [
+            {"type": "image_url", "image_url": {"url": image_data_url}}
+            for image_data_url in image_data_urls
+        ]
+    else:
+        user_content = user_prompt
 
     async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.post(
@@ -54,7 +73,7 @@ async def complete_json(
                 "model": model,
                 "messages": [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
+                    {"role": "user", "content": user_content},
                 ],
                 "response_format": {"type": "json_object"},
                 "temperature": 0.2,
