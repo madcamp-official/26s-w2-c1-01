@@ -1,8 +1,9 @@
+import base64
 import re
 import os
 from html import unescape
 from html.parser import HTMLParser
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,7 +16,8 @@ from app.models.job_posting import JobPosting
 from app.models.user import User
 from app.services.embedding_service import create_embedding
 from app.services.llm_pipeline import (
-    build_job_posting_structure_payload,
+    structure_job_posting_from_image,
+    structure_job_posting_via_llm,
     structure_job_posting_without_llm,
 )
 
@@ -24,6 +26,16 @@ router = APIRouter(prefix="/job-postings", tags=["job-postings"])
 JOB_POSTING_FETCH_TIMEOUT_SECONDS = 10.0
 MIN_EXTRACTED_TEXT_LENGTH = 80
 MAX_RAW_TEXT_LENGTH = 50000
+MAX_IMAGE_CANDIDATES = 6
+MIN_IMAGE_BYTES = 15_000
+MAX_IMAGE_BYTES = 8_000_000
+IMAGE_SRC_PATTERN = re.compile(
+    r'<img[^>]*(?:data-src|data-original|src)="([^"]+)"', re.IGNORECASE
+)
+_NON_CONTENT_IMAGE_HINTS = (
+    "logo", "icon", "sprite", "banner", "gtm", "adserver", "button", "btn_",
+    "favicon", "blank.gif", "spacer", "profile", "avatar", "share_default",
+)
 
 
 class JobPostingCreateRequest(BaseModel):
@@ -113,7 +125,7 @@ def _job_posting_summary_text(raw_text: str, structured_job_posting: dict) -> st
 
 
 def _try_create_embedding(text: str) -> list[float] | None:
-    if not os.getenv("OPENAI_API_KEY"):
+    if not os.getenv("OPENROUTER_API_KEY"):
         return None
     try:
         return create_embedding(text)
@@ -121,7 +133,44 @@ def _try_create_embedding(text: str) -> list[float] | None:
         return None
 
 
-async def _fetch_job_posting_text(url: str) -> str:
+def _extract_image_candidates(html: str, base_url: str) -> list[str]:
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for src in IMAGE_SRC_PATTERN.findall(html):
+        src = unescape(src.strip())
+        if not src or src.startswith("data:"):
+            continue
+        lowered = src.lower()
+        if any(hint in lowered for hint in _NON_CONTENT_IMAGE_HINTS):
+            continue
+        resolved = urljoin(base_url, src)
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        candidates.append(resolved)
+        if len(candidates) >= MAX_IMAGE_CANDIDATES:
+            break
+    return candidates
+
+
+async def _fetch_image_as_data_url(client: httpx.AsyncClient, image_url: str) -> str | None:
+    try:
+        response = await client.get(image_url)
+        response.raise_for_status()
+    except httpx.HTTPError:
+        return None
+
+    content_type = response.headers.get("content-type", "")
+    if not content_type.startswith("image/"):
+        return None
+    if not (MIN_IMAGE_BYTES <= len(response.content) <= MAX_IMAGE_BYTES):
+        return None
+
+    encoded = base64.b64encode(response.content).decode("ascii")
+    return f"data:{content_type};base64,{encoded}"
+
+
+async def _fetch_job_posting_content(url: str) -> tuple[str, dict | None]:
     _validate_url(url)
     try:
         async with httpx.AsyncClient(
@@ -134,6 +183,31 @@ async def _fetch_job_posting_text(url: str) -> str:
         ) as client:
             response = await client.get(url)
             response.raise_for_status()
+
+            content_type = response.headers.get("content-type", "")
+            if "text/html" not in content_type and "application/xhtml+xml" not in content_type:
+                raise HTTPException(
+                    status_code=400,
+                    detail=_error_detail(
+                        "JOB_POSTING_URL_FETCH_FAILED",
+                        "The given URL did not return an HTML page.",
+                    ),
+                )
+
+            html = response.text
+            extracted_text = _extract_visible_text(html)
+            if len(extracted_text) >= MIN_EXTRACTED_TEXT_LENGTH:
+                return extracted_text, None
+
+            # Little/no visible text — this page likely renders the posting as an image
+            # (a recruiting poster/flyer), so fall back to reading candidate images with a
+            # vision-capable LLM instead of failing outright.
+            image_candidates = _extract_image_candidates(html, str(response.url))
+            image_data_urls = []
+            for image_url in image_candidates:
+                data_url = await _fetch_image_as_data_url(client, image_url)
+                if data_url is not None:
+                    image_data_urls.append(data_url)
     except httpx.HTTPError as exc:
         raise HTTPException(
             status_code=400,
@@ -143,27 +217,18 @@ async def _fetch_job_posting_text(url: str) -> str:
             ),
         ) from exc
 
-    content_type = response.headers.get("content-type", "")
-    if "text/html" not in content_type and "application/xhtml+xml" not in content_type:
-        raise HTTPException(
-            status_code=400,
-            detail=_error_detail(
-                "JOB_POSTING_URL_FETCH_FAILED",
-                "The given URL did not return an HTML page.",
-            ),
-        )
+    if image_data_urls:
+        image_result = await structure_job_posting_from_image(image_data_urls)
+        if image_result is not None:
+            return image_result["rawText"], image_result
 
-    extracted_text = _extract_visible_text(response.text)
-    if len(extracted_text) < MIN_EXTRACTED_TEXT_LENGTH:
-        raise HTTPException(
-            status_code=400,
-            detail=_error_detail(
-                "JOB_POSTING_URL_FETCH_FAILED",
-                "The server could not extract enough text from the given URL.",
-            ),
-        )
-
-    return extracted_text
+    raise HTTPException(
+        status_code=400,
+        detail=_error_detail(
+            "JOB_POSTING_URL_FETCH_FAILED",
+            "The server could not extract enough text from the given URL.",
+        ),
+    )
 
 
 @router.post("")
@@ -189,9 +254,16 @@ async def create_job_posting(
             ),
         )
 
-    raw_text = await _fetch_job_posting_text(content) if input_type == "url" else content
-    build_job_posting_structure_payload(raw_text)
-    structured_job_posting = structure_job_posting_without_llm(raw_text)
+    structured_job_posting: dict | None = None
+    if input_type == "url":
+        raw_text, structured_job_posting = await _fetch_job_posting_content(content)
+    else:
+        raw_text = content
+
+    if structured_job_posting is None:
+        structured_job_posting = await structure_job_posting_via_llm(raw_text)
+    if structured_job_posting is None:
+        structured_job_posting = structure_job_posting_without_llm(raw_text)
     content_summary = _job_posting_summary_text(raw_text, structured_job_posting)
     content_embedding = _try_create_embedding(content_summary)
 
