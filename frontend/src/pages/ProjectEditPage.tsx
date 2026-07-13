@@ -26,6 +26,7 @@ export function ProjectEditPage() {
     addSkill,
     addRepository,
   } = useProjects();
+  const canStartAnalysis = activeCount > 0 && typeof jobPostingId === "number";
 
   useEffect(() => {
     refreshProjects();
@@ -118,15 +119,25 @@ export function ProjectEditPage() {
       </PageContainer>
 
       <div className="edit-fixed-cta">
-        <Button
-          variant="dark"
-          size="lg"
-          className="edit-fixed-cta__btn"
-          disabled={activeCount === 0}
-          onClick={() => navigate("/progress", { state: { jobPostingId } })}
-        >
-          프로젝트 {activeCount}개로 분석하기
-        </Button>
+        <div className="edit-fixed-cta__inner">
+          <Button
+            variant="outline"
+            size="lg"
+            className="edit-fixed-cta__btn"
+            onClick={() => navigate("/analyze")}
+          >
+            채용공고 URL 등록하기
+          </Button>
+          <Button
+            variant="dark"
+            size="lg"
+            className="edit-fixed-cta__btn"
+            disabled={!canStartAnalysis}
+            onClick={() => navigate("/progress", { state: { jobPostingId } })}
+          >
+            프로젝트 {activeCount}개로 분석하기
+          </Button>
+        </div>
       </div>
     </>
   );

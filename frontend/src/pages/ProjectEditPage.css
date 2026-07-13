@@ -73,7 +73,20 @@
   padding: 16px var(--content-padding) 28px;
   background: linear-gradient(to top, rgba(245, 242, 242, 1) 40%, rgba(245, 242, 242, 0));
 }
-.edit-fixed-cta__btn {
-  width: min(560px, 100%);
+.edit-fixed-cta__inner {
+  display: flex;
+  width: min(760px, 100%);
   margin: 0 auto;
+  gap: 10px;
+}
+.edit-fixed-cta__btn {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .edit-fixed-cta__inner {
+    flex-direction: column;
+  }
 }
