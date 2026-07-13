@@ -32,7 +32,7 @@ router = APIRouter(prefix="/github", tags=["github"])
 GITHUB_API_URL = "https://api.github.com"
 MAX_REPOSITORIES = 20
 MAX_README_CHARS = 12000
-MAX_EVIDENCE_CHARS = 1200
+MAX_EVIDENCE_CHARS = 8000
 
 
 FULL_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
@@ -290,8 +290,21 @@ def _project_summary_text(repo: dict[str, Any], readme_text: str) -> str:
     return "\n".join(parts)
 
 
+def _project_embedding_text(project: Project) -> str:
+    parts = [f"Project: {project.title}"]
+    if project.role:
+        parts.append(f"Role: {project.role}")
+    if project.description:
+        parts.append(f"Description: {project.description}")
+    if project.skills:
+        parts.append(f"Skills: {', '.join(project.skills)}")
+    if project.achievements:
+        parts.append(f"Achievements: {'; '.join(project.achievements)}")
+    return "\n".join(parts)
+
+
 def _try_create_embedding(text: str) -> list[float] | None:
-    if not os.getenv("OPENAI_API_KEY"):
+    if not os.getenv("OPENROUTER_API_KEY"):
         return None
     try:
         return create_embedding(text)
@@ -411,6 +424,12 @@ async def _apply_llm_enrichment(project: Project, db: Session) -> None:
     if enrichment["skills"]:
         project.skills = enrichment["skills"]
     project.achievements = enrichment["achievements"]
+
+    project.summary_text = _project_embedding_text(project)
+    embedding = _try_create_embedding(project.summary_text)
+    if embedding is not None:
+        project.summary_embedding = embedding
+
     db.flush()
 
 
@@ -440,6 +459,19 @@ async def _collect_github_projects(
 
         full_name = repo.get("full_name")
         if not isinstance(full_name, str) or not full_name:
+            continue
+
+        source_url = repo.get("html_url")
+        existing_project = db.scalar(
+            select(Project).where(
+                Project.user_id == current_user.id,
+                Project.source_type == "github",
+                Project.source_url == source_url,
+            )
+        )
+        if existing_project is not None:
+            # Already collected and possibly hand-edited by the user — leave it untouched.
+            collected_projects.append(existing_project)
             continue
 
         readme_text = await _fetch_readme(access_token, full_name)
@@ -575,12 +607,38 @@ async def add_github_repository(
 
     repo = await _fetch_repository(access_token, request.fullName)
     full_name = repo.get("full_name") or request.fullName
+    source_url = repo.get("html_url") or f"https://github.com/{full_name}"
+
+    existing_project = db.scalar(
+        select(Project).where(
+            Project.user_id == current_user.id,
+            Project.source_type.in_(["github", "github_manual"]),
+            Project.source_url == source_url,
+        )
+    )
+    if existing_project is not None:
+        # Already collected and possibly hand-edited by the user — leave it untouched.
+        evidence_ids = list(
+            db.scalars(select(Evidence.id).where(Evidence.project_id == existing_project.id))
+        )
+        return {
+            "projectId": existing_project.id,
+            "title": existing_project.title,
+            "description": existing_project.description,
+            "role": existing_project.role,
+            "skills": existing_project.skills,
+            "achievements": existing_project.achievements,
+            "sourceType": existing_project.source_type,
+            "sourceUrl": existing_project.source_url,
+            "evidenceIds": evidence_ids,
+        }
+
     readme_text = await _fetch_readme(access_token, full_name)
 
     portfolio_source = PortfolioSource(
         user_id=current_user.id,
         source_type="github_manual",
-        source_url=repo.get("html_url") or f"https://github.com/{full_name}",
+        source_url=source_url,
         status="collecting",
         metadata_={"fullName": full_name},
     )
