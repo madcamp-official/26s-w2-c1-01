@@ -26,6 +26,24 @@
   color: var(--ink-sub);
 }
 
+.edit-empty {
+  padding: 28px 0;
+  color: var(--ink-sub);
+  line-height: 1.6;
+}
+
+.edit-empty__title {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.edit-empty__desc {
+  margin: 0 0 18px;
+  max-width: 560px;
+}
+
 .edit-fixed-cta {
   position: fixed;
   left: 0;

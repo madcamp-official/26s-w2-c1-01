@@ -1,12 +1,15 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { EditableProject } from "../../types/project";
 import { fetchProjects, updateProject as apiUpdateProject } from "../../api/projects";
 import type { UpdateProjectPayload } from "../../api/projects";
+import { getAccessToken } from "../../api/client";
 
 interface ProjectsContextValue {
   projects: EditableProject[];
   loading: boolean;
+  errorMessage: string | null;
   activeCount: number;
+  refreshProjects: () => Promise<void>;
   updateProject: (projectId: number, patch: UpdateProjectPayload) => void;
   toggleExcluded: (projectId: number) => void;
   addSkill: (projectId: number, skill: string) => void;
@@ -17,13 +20,31 @@ const ProjectsContext = createContext<ProjectsContextValue | null>(null);
 export function ProjectsProvider({ children }: { children: ReactNode }) {
   const [projects, setProjects] = useState<EditableProject[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const refreshProjects = useCallback(async () => {
+    if (!getAccessToken()) {
+      setProjects([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setErrorMessage(null);
+    // api-spec.md #7 GET /projects
+    try {
+      const data = await fetchProjects();
+      setProjects(data.map((p) => ({ ...p, excluded: false })));
+    } catch (err) {
+      setProjects([]);
+      setErrorMessage(err instanceof Error ? err.message : "프로젝트를 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    // api-spec.md #7 GET /projects
-    fetchProjects().then((data) => {
-      setProjects(data.map((p) => ({ ...p, excluded: false })));
-      setLoading(false);
-    });
+    refreshProjects();
   }, []);
 
   const updateProject = (projectId: number, patch: UpdateProjectPayload) => {
@@ -46,7 +67,7 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
 
   return (
     <ProjectsContext.Provider
-      value={{ projects, loading, activeCount, updateProject, toggleExcluded, addSkill }}
+      value={{ projects, loading, errorMessage, activeCount, refreshProjects, updateProject, toggleExcluded, addSkill }}
     >
       {children}
     </ProjectsContext.Provider>

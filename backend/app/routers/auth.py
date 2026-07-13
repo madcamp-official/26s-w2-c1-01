@@ -55,6 +55,7 @@ def github_login():
         "client_id": client_id,
         "redirect_uri": _github_redirect_uri(),
         "scope": "read:user user:email public_repo",
+        "prompt": "select_account",
     }
     return {
         "redirectUrl": f"{GITHUB_AUTHORIZE_URL}?{urlencode(params)}"

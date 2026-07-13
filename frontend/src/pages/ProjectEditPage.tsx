@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Header, PageContainer } from "../components/Layout";
 import { Button } from "../components/Button";
@@ -13,7 +14,11 @@ export function ProjectEditPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { jobPostingId } = (location.state as LocationState | null) ?? {};
-  const { projects, loading, activeCount, updateProject, toggleExcluded, addSkill } = useProjects();
+  const { projects, loading, errorMessage, activeCount, refreshProjects, updateProject, toggleExcluded, addSkill } = useProjects();
+
+  useEffect(() => {
+    refreshProjects();
+  }, [refreshProjects]);
 
   return (
     <>
@@ -26,6 +31,18 @@ export function ProjectEditPage() {
 
         {loading ? (
           <p className="edit-loading">프로젝트를 불러오는 중이에요...</p>
+        ) : errorMessage ? (
+          <p className="edit-empty">{errorMessage}</p>
+        ) : projects.length === 0 ? (
+          <div className="edit-empty">
+            <p className="edit-empty__title">수집된 GitHub 프로젝트가 없어요.</p>
+            <p className="edit-empty__desc">
+              연결된 GitHub 계정에서 접근 가능한 repository가 없거나, OAuth 권한으로 repository 목록을 가져오지 못한 상태입니다.
+            </p>
+            <Button variant="outline" onClick={() => navigate("/analyze")}>
+              다시 수집하기
+            </Button>
+          </div>
         ) : (
           <div className="edit-list">
             {projects.map((project) => (
