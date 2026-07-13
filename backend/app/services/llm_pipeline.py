@@ -1,9 +1,11 @@
+import json
 from collections import OrderedDict
 from typing import Any
 
 from app.models.evidence import Evidence
 from app.models.job_posting import JobPosting
 from app.models.project import Project
+from app.services.llm_client import LLMError, complete_json
 
 KNOWN_SKILLS = [
     "Python",
@@ -65,6 +67,67 @@ def json_list_to_strings(value: Any) -> list[str]:
             if isinstance(name, str):
                 items.append(name)
     return unique_strings(items)
+
+
+PROJECT_ENRICHMENT_SYSTEM_PROMPT = (
+    "You are a technical resume writer. Given evidence collected from a GitHub repository "
+    "(README, repo metadata), produce a concise, resume-ready project summary. "
+    "Base every statement strictly on the provided evidence — never invent metrics, users, "
+    "or outcomes that are not supported by the text. If the evidence is too sparse to infer "
+    "something, leave it minimal rather than fabricating detail. "
+    'Respond with a single JSON object: {"role": string, "skills": string[], '
+    '"description": string, "achievements": string[]}. "role" is a short job-title-like '
+    'phrase (e.g. "Backend Developer"). "skills" are concrete technologies/tools actually '
+    'evidenced. "description" is 1-3 sentences summarizing what the project does. '
+    '"achievements" is a list of 0-4 short bullet-style accomplishments; return an empty '
+    "list if the evidence does not support any concrete achievement."
+)
+
+
+def build_project_enrichment_payload(project: Project, evidences: list[Evidence]) -> dict:
+    return {
+        "task": "project_enrichment",
+        "instructions": [
+            "Use only the provided evidence.",
+            "Do not invent achievements, metrics, or users not present in the evidence.",
+        ],
+        "project": {
+            "title": project.title,
+            "existingDescription": project.description,
+            "existingSkills": project.skills,
+            "sourceUrl": project.source_url,
+        },
+        "evidences": [
+            {
+                "title": evidence.title,
+                "content": evidence.content,
+            }
+            for evidence in evidences
+        ],
+    }
+
+
+def parse_project_enrichment(result: dict) -> dict:
+    role = result.get("role")
+    description = result.get("description")
+    return {
+        "role": role.strip() if isinstance(role, str) and role.strip() else None,
+        "skills": json_list_to_strings(result.get("skills")),
+        "description": description.strip() if isinstance(description, str) and description.strip() else None,
+        "achievements": json_list_to_strings(result.get("achievements")),
+    }
+
+
+async def enrich_project_via_llm(project: Project, evidences: list[Evidence]) -> dict | None:
+    payload = build_project_enrichment_payload(project, evidences)
+    try:
+        result = await complete_json(
+            PROJECT_ENRICHMENT_SYSTEM_PROMPT,
+            json.dumps(payload, ensure_ascii=False),
+        )
+    except LLMError:
+        return None
+    return parse_project_enrichment(result)
 
 
 def build_job_posting_structure_payload(raw_text: str) -> dict:

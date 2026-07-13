@@ -1,9 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Header, PageContainer } from "../components/Layout";
 import { Button } from "../components/Button";
 import { ProjectCard } from "../components/ProjectCard";
 import { useProjects } from "../features/projects/useProjects";
+import { ApiError } from "../api/client";
 import "./ProjectEditPage.css";
 
 interface LocationState {
@@ -14,11 +15,43 @@ export function ProjectEditPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { jobPostingId } = (location.state as LocationState | null) ?? {};
-  const { projects, loading, errorMessage, activeCount, refreshProjects, updateProject, toggleExcluded, addSkill } = useProjects();
+  const {
+    projects,
+    loading,
+    errorMessage,
+    activeCount,
+    refreshProjects,
+    updateProject,
+    toggleExcluded,
+    addSkill,
+    addRepository,
+  } = useProjects();
 
   useEffect(() => {
     refreshProjects();
   }, [refreshProjects]);
+
+  const [repoInput, setRepoInput] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
+  const handleAddRepository = async () => {
+    const fullName = repoInput.trim();
+    if (!fullName) return;
+
+    setAdding(true);
+    setAddError(null);
+    try {
+      await addRepository(fullName);
+      setRepoInput("");
+    } catch (err) {
+      setAddError(
+        err instanceof ApiError ? err.message : "저장소를 추가하지 못했어요. 다시 시도해주세요.",
+      );
+    } finally {
+      setAdding(false);
+    }
+  };
 
   return (
     <>
@@ -28,6 +61,29 @@ export function ProjectEditPage() {
           GitHub에서 프로젝트 <span className="edit-title__accent">{activeCount}개</span>를 찾았어요
         </h1>
         <p className="edit-subtitle">내용을 확인하고 수정하거나, 이력서 생성에서 제외할 수 있어요.</p>
+
+        <div className="edit-manual-add">
+          <input
+            className="edit-manual-add__input"
+            type="text"
+            placeholder="organization/repo 형식으로 자동 수집되지 않은 저장소를 추가하세요"
+            value={repoInput}
+            onChange={(e) => setRepoInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleAddRepository();
+            }}
+            disabled={adding}
+          />
+          <Button
+            variant="outline"
+            size="md"
+            onClick={handleAddRepository}
+            disabled={adding || !repoInput.trim()}
+          >
+            {adding ? "추가하는 중..." : "레포 추가"}
+          </Button>
+        </div>
+        {addError && <p className="edit-manual-add__error">{addError}</p>}
 
         {loading ? (
           <p className="edit-loading">프로젝트를 불러오는 중이에요...</p>

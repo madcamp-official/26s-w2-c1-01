@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import os
+import re
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -10,7 +11,7 @@ import httpx
 from cryptography.fernet import Fernet, InvalidToken
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -21,6 +22,7 @@ from app.models.evidence import Evidence
 from app.models.portfolio import PortfolioSource, ProjectSourceLink, SourceDocument
 from app.models.project import Project
 from app.models.user import OAuthAccount, User
+from app.services.llm_pipeline import enrich_project_via_llm
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
@@ -32,8 +34,23 @@ MAX_README_CHARS = 12000
 MAX_EVIDENCE_CHARS = 1200
 
 
+FULL_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+
+
 class GithubCollectionJobCreateRequest(BaseModel):
     agreedToAnalyze: bool
+
+
+class GithubManualRepositoryCreateRequest(BaseModel):
+    fullName: str
+
+    @field_validator("fullName")
+    @classmethod
+    def validate_full_name(cls, value: str) -> str:
+        value = value.strip()
+        if not FULL_NAME_PATTERN.match(value):
+            raise ValueError("fullName must look like 'owner/repo'.")
+        return value
 
 
 def _job_response(job: AsyncJob) -> dict:
@@ -123,7 +140,7 @@ async def _fetch_repositories(access_token: str) -> list[dict[str, Any]]:
             f"{GITHUB_API_URL}/user/repos",
             headers=_github_headers(access_token),
             params={
-                "affiliation": "owner,collaborator",
+                "affiliation": "owner,collaborator,organization_member",
                 "sort": "updated",
                 "direction": "desc",
                 "per_page": MAX_REPOSITORIES,
@@ -154,6 +171,50 @@ async def _fetch_repositories(access_token: str) -> list[dict[str, Any]]:
             detail=_error_detail(
                 "GITHUB_REPOSITORY_FETCH_FAILED",
                 "GitHub repository response was not a list.",
+            ),
+        )
+    return body
+
+
+async def _fetch_repository(access_token: str, full_name: str) -> dict[str, Any]:
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.get(
+            f"{GITHUB_API_URL}/repos/{full_name}",
+            headers=_github_headers(access_token),
+        )
+
+    if response.status_code in {401, 403}:
+        raise HTTPException(
+            status_code=401,
+            detail=_error_detail(
+                "GITHUB_TOKEN_EXPIRED",
+                "GitHub token is invalid or no longer has repository access.",
+            ),
+        )
+    if response.status_code == 404:
+        raise HTTPException(
+            status_code=404,
+            detail=_error_detail(
+                "GITHUB_REPOSITORY_NOT_FOUND",
+                f"Repository '{full_name}' was not found or is not accessible with your GitHub account.",
+            ),
+        )
+    if response.is_error:
+        raise HTTPException(
+            status_code=502,
+            detail=_error_detail(
+                "GITHUB_REPOSITORY_FETCH_FAILED",
+                "Failed to fetch repository from GitHub.",
+            ),
+        )
+
+    body = response.json()
+    if not isinstance(body, dict):
+        raise HTTPException(
+            status_code=502,
+            detail=_error_detail(
+                "GITHUB_REPOSITORY_FETCH_FAILED",
+                "GitHub repository response was not an object.",
             ),
         )
     return body
@@ -296,6 +357,25 @@ def _create_source_records(
     )
 
 
+async def _apply_llm_enrichment(project: Project, db: Session) -> None:
+    db.flush()
+    evidences = list(
+        db.scalars(select(Evidence).where(Evidence.project_id == project.id))
+    )
+    enrichment = await enrich_project_via_llm(project, evidences)
+    if enrichment is None:
+        return
+
+    if enrichment["role"] is not None:
+        project.role = enrichment["role"]
+    if enrichment["description"] is not None:
+        project.description = enrichment["description"]
+    if enrichment["skills"]:
+        project.skills = enrichment["skills"]
+    project.achievements = enrichment["achievements"]
+    db.flush()
+
+
 async def _collect_github_projects(
     current_user: User,
     access_token: str,
@@ -327,6 +407,7 @@ async def _collect_github_projects(
         readme_text = await _fetch_readme(access_token, full_name)
         project = _upsert_project(current_user, repo, readme_text, db)
         _create_source_records(portfolio_source, project, repo, readme_text, db)
+        await _apply_llm_enrichment(project, db)
         collected_projects.append(project)
 
     portfolio_source.status = "completed"
@@ -443,3 +524,56 @@ def get_github_collection_job(
 
     response["projects"] = projects
     return response
+
+
+@router.post("/repositories")
+async def add_github_repository(
+    request: GithubManualRepositoryCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    account = _github_account(current_user, db)
+    access_token = _decrypt_oauth_token(account.access_token_encrypted or "")
+
+    repo = await _fetch_repository(access_token, request.fullName)
+    full_name = repo.get("full_name") or request.fullName
+    readme_text = await _fetch_readme(access_token, full_name)
+
+    portfolio_source = PortfolioSource(
+        user_id=current_user.id,
+        source_type="github_manual",
+        source_url=repo.get("html_url") or f"https://github.com/{full_name}",
+        status="collecting",
+        metadata_={"fullName": full_name},
+    )
+    db.add(portfolio_source)
+    db.flush()
+
+    project = _upsert_project(current_user, repo, readme_text, db)
+    _create_source_records(portfolio_source, project, repo, readme_text, db)
+    await _apply_llm_enrichment(project, db)
+
+    portfolio_source.status = "completed"
+    portfolio_source.metadata_ = {
+        **(portfolio_source.metadata_ or {}),
+        "projectId": project.id,
+    }
+
+    db.commit()
+    db.refresh(project)
+
+    evidence_ids = list(
+        db.scalars(select(Evidence.id).where(Evidence.project_id == project.id))
+    )
+
+    return {
+        "projectId": project.id,
+        "title": project.title,
+        "description": project.description,
+        "role": project.role,
+        "skills": project.skills,
+        "achievements": project.achievements,
+        "sourceType": project.source_type,
+        "sourceUrl": project.source_url,
+        "evidenceIds": evidence_ids,
+    }

@@ -3,6 +3,7 @@ import type { EditableProject } from "../../types/project";
 import { fetchProjects, updateProject as apiUpdateProject } from "../../api/projects";
 import type { UpdateProjectPayload } from "../../api/projects";
 import { getAccessToken } from "../../api/client";
+import { addGithubRepository } from "../../api/github";
 
 interface ProjectsContextValue {
   projects: EditableProject[];
@@ -13,6 +14,7 @@ interface ProjectsContextValue {
   updateProject: (projectId: number, patch: UpdateProjectPayload) => void;
   toggleExcluded: (projectId: number) => void;
   addSkill: (projectId: number, skill: string) => void;
+  addRepository: (fullName: string) => Promise<void>;
 }
 
 const ProjectsContext = createContext<ProjectsContextValue | null>(null);
@@ -63,11 +65,33 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       prev.map((p) => (p.projectId === projectId ? { ...p, skills: [...p.skills, skill] } : p)),
     );
 
+  const addRepository = async (fullName: string) => {
+    // api-spec.md #9 POST /github/repositories
+    const project = await addGithubRepository(fullName);
+    setProjects((prev) => {
+      const exists = prev.some((p) => p.projectId === project.projectId);
+      if (exists) {
+        return prev.map((p) => (p.projectId === project.projectId ? { ...p, ...project } : p));
+      }
+      return [...prev, { ...project, excluded: false }];
+    });
+  };
+
   const activeCount = useMemo(() => projects.filter((p) => !p.excluded).length, [projects]);
 
   return (
     <ProjectsContext.Provider
-      value={{ projects, loading, errorMessage, activeCount, refreshProjects, updateProject, toggleExcluded, addSkill }}
+      value={{
+        projects,
+        loading,
+        errorMessage,
+        activeCount,
+        refreshProjects,
+        updateProject,
+        toggleExcluded,
+        addSkill,
+        addRepository,
+      }}
     >
       {children}
     </ProjectsContext.Provider>

@@ -16,6 +16,26 @@
   line-height: 1.6;
 }
 
+.edit-manual-add {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.edit-manual-add__input {
+  flex: 1;
+  min-width: 0;
+  padding: 0 14px;
+  height: 44px;
+  border: 1px solid var(--line, #ddd);
+  border-radius: 10px;
+  font-size: 14px;
+}
+.edit-manual-add__error {
+  margin: 0 0 24px;
+  font-size: 13px;
+  color: var(--danger, #d92d20);
+}
+
 .edit-list {
   display: flex;
   flex-direction: column;

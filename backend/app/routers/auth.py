@@ -54,7 +54,7 @@ def github_login():
     params = {
         "client_id": client_id,
         "redirect_uri": _github_redirect_uri(),
-        "scope": "read:user user:email public_repo",
+        "scope": "read:user user:email repo read:org",
         "prompt": "select_account",
     }
     return {
