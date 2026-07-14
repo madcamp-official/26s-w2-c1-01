@@ -1,12 +1,14 @@
+import asyncio
+import hashlib
 import logging
 import math
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.database import get_db
+from app.db.database import SessionLocal, get_db
 from app.dependencies.auth_helper import get_current_user
 from app.models.analysis import AnalysisResult, RecommendationEvidence, RecommendedProject
 from app.models.async_job import AsyncJob
@@ -17,7 +19,6 @@ from app.models.portfolio import ProjectSourceLink, SourceDocument
 from app.models.project import Project
 from app.models.user import User
 from app.services.llm_pipeline import (
-    build_project_recommendation_payload,
     generate_recommendation_reason_via_llm,
     validate_project_recommendations,
 )
@@ -91,6 +92,18 @@ def _cosine_similarity(left, right) -> float | None:
     return max(0.0, min(1.0, dot / (left_norm * right_norm)))
 
 
+def _cv_document_text(document: CvDocument, sections: list[CvSection]) -> str:
+    return "\n\n".join(
+        f"{section.title}\n{section.content.strip()}"
+        for section in sections
+        if section.cv_document_id == document.id and section.content.strip()
+    ).strip()
+
+
+def _text_hash(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def _cv_section_evidence(
     sections: list[CvSection],
     target_skills: list[str],
@@ -137,11 +150,11 @@ async def _calculate_cv_fit(
         .where(CvSection.cv_document_id.in_(cv_ids))
         .order_by(CvSection.sort_order.asc())
     ).all()
-    cv_text = "\n\n".join(
-        f"{section.title}\n{section.content.strip()}"
-        for section in sections
-        if section.content.strip()
-    ).strip()
+    cv_texts_by_document = {
+        document.id: _cv_document_text(document, sections)
+        for document in cv_documents
+    }
+    cv_text = "\n\n".join(text for text in cv_texts_by_document.values() if text).strip()
     if not cv_text:
         return None, {}
 
@@ -175,13 +188,25 @@ async def _calculate_cv_fit(
     ]
     rule_score = len(matched_skills) / len(target_skills) if target_skills else 0.0
 
-    vector_score = None
+    vector_scores: list[float] = []
     if job_posting.content_embedding is not None:
-        try:
-            cv_embedding = await create_embedding_async(cv_text[:8000])
-            vector_score = _cosine_similarity(cv_embedding, job_posting.content_embedding)
-        except (EmbeddingError, Exception) as exc:
-            logger.warning("CV fit embedding failed: %s", exc)
+        for document in cv_documents:
+            document_text = cv_texts_by_document.get(document.id, "")
+            if not document_text:
+                continue
+            text_hash = _text_hash(document_text)
+            if document.content_embedding is None or document.embedding_text_hash != text_hash:
+                try:
+                    document.content_embedding = await create_embedding_async(document_text[:8000])
+                    document.embedding_text_hash = text_hash
+                    db.flush()
+                except (EmbeddingError, Exception) as exc:
+                    logger.warning("CV fit embedding failed: %s", exc)
+                    continue
+            similarity = _cosine_similarity(document.content_embedding, job_posting.content_embedding)
+            if similarity is not None:
+                vector_scores.append(similarity)
+    vector_score = max(vector_scores) if vector_scores else None
 
     if vector_score is None:
         final_score = rule_score
@@ -569,10 +594,175 @@ def _create_llm_recommendation_match_evidences(
     return evidences
 
 
+async def _run_analysis_job(
+    job_id: int,
+    user_id: int,
+    job_posting_id: int,
+    recommendation_limit: int,
+) -> None:
+    db = SessionLocal()
+    try:
+        job = db.scalar(select(AsyncJob).where(AsyncJob.id == job_id))
+        if job is None:
+            return
+
+        job.status = "running"
+        job.message = "Analyzing job posting against projects."
+        db.commit()
+
+        job_posting = db.scalar(
+            select(JobPosting).where(
+                JobPosting.id == job_posting_id,
+                JobPosting.user_id == user_id,
+            )
+        )
+        if job_posting is None:
+            job.status = "failed"
+            job.message = "Job posting not found."
+            job.error_code = "JOB_POSTING_NOT_FOUND"
+            job.error_detail = "Job posting not found."
+            db.commit()
+            return
+
+        analysis_result = AnalysisResult(
+            user_id=user_id,
+            job_posting_id=job_posting.id,
+            recommendation_limit=recommendation_limit,
+            missing_skills=[],
+            missing_experiences=[],
+            missing_competencies=[],
+        )
+        db.add(analysis_result)
+        db.flush()
+
+        projects = db.scalars(
+            select(Project)
+            .where(
+                Project.user_id == user_id,
+                Project.is_archived.is_(False),
+            )
+            .order_by(Project.created_at.desc())
+        ).all()
+        evidence_by_project = _evidence_by_project([project.id for project in projects], db)
+        source_documents_by_project = _source_documents_by_project(
+            [project.id for project in projects],
+            db,
+        )
+        projects_by_id = {project.id: project for project in projects}
+
+        cv_fit_score, cv_fit_details = await _calculate_cv_fit(db, user_id, job_posting)
+        analysis_result.cv_fit_score = cv_fit_score
+        analysis_result.cv_fit_details = cv_fit_details
+
+        recommendations = validate_project_recommendations(
+            recommend_projects_hybrid(
+                db,
+                user_id,
+                job_posting,
+                projects,
+                evidence_by_project,
+                recommendation_limit,
+            ),
+            projects,
+            evidence_by_project,
+        )
+
+        reason_tasks = []
+        reason_contexts = []
+        for recommendation in recommendations:
+            project = projects_by_id.get(recommendation["projectId"])
+            if project is None:
+                continue
+            source_documents = source_documents_by_project.get(project.id, [])
+            reason_contexts.append((recommendation, project, source_documents))
+            reason_tasks.append(
+                generate_recommendation_reason_via_llm(
+                    job_posting,
+                    project,
+                    recommendation,
+                    source_documents,
+                )
+            )
+        llm_reason_results = await asyncio.gather(*reason_tasks, return_exceptions=True) if reason_tasks else []
+
+        all_missing_skills = []
+        for index, (context, llm_reason_result) in enumerate(
+            zip(reason_contexts, llm_reason_results),
+            start=1,
+        ):
+            recommendation, project, source_documents = context
+            all_missing_skills.extend(recommendation["missingSkills"])
+            if isinstance(llm_reason_result, Exception):
+                logger.warning("Recommendation reason task failed: %s", llm_reason_result)
+                llm_reason_result = None
+
+            reason = (
+                llm_reason_result["reason"]
+                if llm_reason_result is not None and llm_reason_result["reason"]
+                else recommendation["reason"]
+            )
+            recommended_project = RecommendedProject(
+                analysis_result_id=analysis_result.id,
+                project_id=recommendation["projectId"],
+                rank=index,
+                score=recommendation["score"],
+                reason=reason,
+                matched_skills=recommendation["matchedSkills"],
+                missing_skills=recommendation["missingSkills"],
+            )
+            db.add(recommended_project)
+            db.flush()
+
+            if llm_reason_result is not None and llm_reason_result["evidences"]:
+                match_evidences = _create_llm_recommendation_match_evidences(
+                    db,
+                    job_posting,
+                    project,
+                    llm_reason_result["evidences"],
+                    source_documents,
+                )
+            else:
+                match_evidences = _create_recommendation_match_evidences(
+                    db,
+                    job_posting,
+                    recommended_project,
+                    project,
+                    source_documents,
+                )
+
+            for evidence in match_evidences:
+                db.add(
+                    RecommendationEvidence(
+                        recommended_project_id=recommended_project.id,
+                        evidence_id=evidence.id,
+                    )
+                )
+
+        analysis_result.missing_skills = list(dict.fromkeys(all_missing_skills))
+        job.status = "completed"
+        job.message = "Job posting analysis completed."
+        job.result_type = "analysis_result"
+        job.result_id = analysis_result.id
+        db.commit()
+    except Exception as exc:
+        logger.exception("Analysis background job failed")
+        db.rollback()
+        job = db.scalar(select(AsyncJob).where(AsyncJob.id == job_id))
+        if job is not None:
+            job.status = "failed"
+            job.message = "Job posting analysis failed."
+            job.error_code = "ANALYSIS_FAILED"
+            job.error_detail = str(exc)
+            db.commit()
+    finally:
+        db.close()
+
+
 @router.post("/job-postings/{job_posting_id}/analysis-jobs")
 async def create_analysis_job(
     job_posting_id: int,
     request: AnalysisJobCreateRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -591,124 +781,22 @@ async def create_analysis_job(
         user_id=current_user.id,
         job_type="job_posting_analysis",
         status="running",
-        message="Analyzing job posting against projects.",
+        message="Analysis job queued.",
+        metadata_={
+            "jobPostingId": job_posting.id,
+            "recommendationLimit": recommendation_limit,
+        },
     )
     db.add(job)
-    db.flush()
-
-    analysis_result = AnalysisResult(
-        user_id=current_user.id,
-        job_posting_id=job_posting.id,
-        recommendation_limit=recommendation_limit,
-        missing_skills=[],
-        missing_experiences=[],
-        missing_competencies=[],
-    )
-    db.add(analysis_result)
-    db.flush()
-
-    projects = db.scalars(
-        select(Project)
-        .where(
-            Project.user_id == current_user.id,
-            Project.is_archived.is_(False),
-        )
-        .order_by(Project.created_at.desc())
-    ).all()
-    evidence_by_project = _evidence_by_project([project.id for project in projects], db)
-    source_documents_by_project = _source_documents_by_project(
-        [project.id for project in projects],
-        db,
-    )
-    projects_by_id = {project.id: project for project in projects}
-
-    cv_fit_score, cv_fit_details = await _calculate_cv_fit(db, current_user.id, job_posting)
-    analysis_result.cv_fit_score = cv_fit_score
-    analysis_result.cv_fit_details = cv_fit_details
-
-    build_project_recommendation_payload(
-        job_posting,
-        projects,
-        evidence_by_project,
-        recommendation_limit,
-    )
-    recommendations = validate_project_recommendations(
-        recommend_projects_hybrid(
-            db,
-            current_user.id,
-            job_posting,
-            projects,
-            evidence_by_project,
-            recommendation_limit,
-        ),
-        projects,
-        evidence_by_project,
-    )
-
-    all_missing_skills = []
-    for index, recommendation in enumerate(recommendations, start=1):
-        all_missing_skills.extend(recommendation["missingSkills"])
-        project = projects_by_id.get(recommendation["projectId"])
-        if project is None:
-            continue
-
-        source_documents = source_documents_by_project.get(project.id, [])
-        llm_reason_result = await generate_recommendation_reason_via_llm(
-            job_posting,
-            project,
-            recommendation,
-            source_documents,
-        )
-        reason = (
-            llm_reason_result["reason"]
-            if llm_reason_result is not None and llm_reason_result["reason"]
-            else recommendation["reason"]
-        )
-        recommended_project = RecommendedProject(
-            analysis_result_id=analysis_result.id,
-            project_id=recommendation["projectId"],
-            rank=index,
-            score=recommendation["score"],
-            reason=reason,
-            matched_skills=recommendation["matchedSkills"],
-            missing_skills=recommendation["missingSkills"],
-        )
-        db.add(recommended_project)
-        db.flush()
-
-        if llm_reason_result is not None and llm_reason_result["evidences"]:
-            match_evidences = _create_llm_recommendation_match_evidences(
-                db,
-                job_posting,
-                project,
-                llm_reason_result["evidences"],
-                source_documents,
-            )
-        else:
-            match_evidences = _create_recommendation_match_evidences(
-                db,
-                job_posting,
-                recommended_project,
-                project,
-                source_documents,
-            )
-
-        for evidence in match_evidences:
-            db.add(
-                RecommendationEvidence(
-                    recommended_project_id=recommended_project.id,
-                    evidence_id=evidence.id,
-                )
-            )
-
-    analysis_result.missing_skills = list(dict.fromkeys(all_missing_skills))
-    job.status = "completed"
-    job.message = "Job posting analysis completed."
-    job.result_type = "analysis_result"
-    job.result_id = analysis_result.id
-
     db.commit()
     db.refresh(job)
+    background_tasks.add_task(
+        _run_analysis_job,
+        job.id,
+        current_user.id,
+        job_posting.id,
+        recommendation_limit,
+    )
 
     return _job_response(job)
 

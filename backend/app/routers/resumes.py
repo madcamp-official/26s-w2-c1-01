@@ -1,12 +1,14 @@
 from collections import OrderedDict
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+import logging
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.database import get_db
+from app.db.database import SessionLocal, get_db
 from app.dependencies.auth_helper import get_current_user
 from app.models.analysis import AnalysisResult
 from app.models.async_job import AsyncJob
@@ -29,6 +31,7 @@ from app.services.llm_pipeline import (
 from app.services.recommendation_service import _has_skill_match
 
 router = APIRouter(tags=["resumes"])
+logger = logging.getLogger(__name__)
 
 
 class ResumeJobCreateRequest(BaseModel):
@@ -484,9 +487,86 @@ async def _build_resume_result(
     return resume_result
 
 
+async def _run_resume_job(
+    job_id: int,
+    user_id: int,
+    job_posting_id: int,
+    project_ids: list[int],
+) -> None:
+    db = SessionLocal()
+    try:
+        job = db.scalar(select(AsyncJob).where(AsyncJob.id == job_id))
+        if job is None:
+            return
+
+        user = db.scalar(select(User).where(User.id == user_id))
+        job_posting = db.scalar(
+            select(JobPosting).where(
+                JobPosting.id == job_posting_id,
+                JobPosting.user_id == user_id,
+            )
+        )
+        if user is None or job_posting is None:
+            job.status = "failed"
+            job.message = "Resume draft generation failed."
+            job.error_code = "JOB_POSTING_NOT_FOUND"
+            job.error_detail = "Job posting not found."
+            db.commit()
+            return
+
+        projects = db.scalars(
+            select(Project).where(
+                Project.id.in_(project_ids),
+                Project.user_id == user_id,
+                Project.is_archived.is_(False),
+            )
+        ).all()
+        projects_by_id = {project.id: project for project in projects}
+        missing_project_ids = [
+            project_id for project_id in project_ids if project_id not in projects_by_id
+        ]
+        if missing_project_ids:
+            job.status = "failed"
+            job.message = "Resume draft generation failed."
+            job.error_code = "PROJECTS_NOT_FOUND"
+            job.error_detail = f"Projects not found: {missing_project_ids}"
+            db.commit()
+            return
+
+        ordered_projects = [projects_by_id[project_id] for project_id in project_ids]
+        job.status = "running"
+        job.message = "Generating resume draft from selected projects."
+        db.commit()
+
+        resume_result = await _build_resume_result(
+            user,
+            job_posting,
+            ordered_projects,
+            db,
+        )
+        job.status = "completed"
+        job.message = "Resume draft generation completed."
+        job.result_type = "resume_result"
+        job.result_id = resume_result.id
+        db.commit()
+    except Exception as exc:
+        logger.exception("Resume background job failed")
+        db.rollback()
+        job = db.scalar(select(AsyncJob).where(AsyncJob.id == job_id))
+        if job is not None:
+            job.status = "failed"
+            job.message = "Resume draft generation failed."
+            job.error_code = "RESUME_GENERATION_FAILED"
+            job.error_detail = str(exc)
+            db.commit()
+    finally:
+        db.close()
+
+
 @router.post("/resume-jobs")
 async def create_resume_job(
     request: ResumeJobCreateRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -552,29 +632,22 @@ async def create_resume_job(
         user_id=current_user.id,
         job_type="resume_generation",
         status="running",
-        message="Generating resume draft from selected projects.",
+        message="Resume draft generation queued.",
         metadata_={
             "jobPostingId": request.jobPostingId,
             "projectIds": project_ids,
         },
     )
     db.add(job)
-    db.flush()
-
-    resume_result = existing_resume_result or await _build_resume_result(
-        current_user,
-        job_posting,
-        ordered_projects,
-        db,
-    )
-
-    job.status = "completed"
-    job.message = "Resume draft generation completed."
-    job.result_type = "resume_result"
-    job.result_id = resume_result.id
-
     db.commit()
     db.refresh(job)
+    background_tasks.add_task(
+        _run_resume_job,
+        job.id,
+        current_user.id,
+        job_posting.id,
+        project_ids,
+    )
 
     return _job_response(job)
 

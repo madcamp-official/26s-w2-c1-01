@@ -312,6 +312,8 @@ def update_cv_section(
         .order_by(CvSection.sort_order.asc())
     ).all()
     if cv_document is not None:
+        cv_document.content_embedding = None
+        cv_document.embedding_text_hash = None
         _sync_cv_projects(db, cv_document, sections)
 
     db.commit()

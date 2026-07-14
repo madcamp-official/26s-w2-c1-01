@@ -2,6 +2,7 @@ from datetime import datetime
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
+from pgvector.sqlalchemy import Vector
 
 from app.db.base import Base
 
@@ -18,6 +19,8 @@ class CvDocument(Base):
     file_name: Mapped[str] = mapped_column(Text, nullable=False)
     file_path: Mapped[str | None] = mapped_column(Text)
     raw_text: Mapped[str | None] = mapped_column(Text)
+    embedding_text_hash: Mapped[str | None] = mapped_column(Text)
+    content_embedding: Mapped[list[float] | None] = mapped_column(Vector(1536))
     status: Mapped[str] = mapped_column(Text, nullable=False, default="ready")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Header, PageContainer } from "../components/Layout";
 import { Card } from "../components/Card";
@@ -42,7 +42,6 @@ export function RecommendationResultPage() {
   const { user } = useAuth();
   const jobId = id ? Number(id) : undefined;
   const { analysis, analysisLoading, resume, resumeLoading } = useRecommendationResult(jobId);
-  const [openSectionIndex, setOpenSectionIndex] = useState<number | null>(null);
 
   const sortedProjects = useMemo(
     () => (analysis ? [...analysis.recommendedProjects].sort((a, b) => b.score - a.score) : []),
@@ -199,15 +198,6 @@ export function RecommendationResultPage() {
 
   const { jobPosting } = analysis;
   const cvFit = analysis.cvFit;
-  const matchEvidenceForSection = (projectId?: number) => {
-    if (typeof projectId === "number") {
-      return analysis.recommendedProjects.find((project) => project.projectId === projectId)?.matchEvidence ?? [];
-    }
-    return analysis.recommendedProjects
-      .flatMap((project) => project.matchEvidence ?? [])
-      .filter((item) => item.matchType !== "missing")
-      .slice(0, 8);
-  };
 
   return (
     <>
@@ -403,9 +393,6 @@ export function RecommendationResultPage() {
                       heading: cleanResumeText(section.heading),
                       content: cleanResumeText(section.content),
                     }}
-                    matchEvidence={matchEvidenceForSection(section.projectId)}
-                    open={openSectionIndex === i}
-                    onToggle={() => setOpenSectionIndex((prev) => (prev === i ? null : i))}
                   />
                 ))}
               </div>

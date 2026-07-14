@@ -1,12 +1,8 @@
-import type { MatchEvidence } from "../types/analysis";
 import type { ResumeSection } from "../types/resume";
 import "./EvidenceAccordion.css";
 
 interface EvidenceAccordionProps {
   section: ResumeSection;
-  matchEvidence: MatchEvidence[];
-  open: boolean;
-  onToggle: () => void;
 }
 
 export function EvidenceAccordion({ section }: EvidenceAccordionProps) {
