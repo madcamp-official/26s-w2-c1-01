@@ -9,6 +9,7 @@ from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.core.config import get_backend_access_token_secret
 from app.models.user import User
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
@@ -18,13 +19,13 @@ ACCESS_TOKEN_EXPIRE_HOURS = 12
 
 
 def _get_token_secret() -> str:
-    secret = os.getenv("BACKEND_ACCESS_TOKEN_SECRET", "dev-secret-change-me")
-    if not secret:
+    try:
+        return get_backend_access_token_secret()
+    except RuntimeError as exc:
         raise HTTPException(
             status_code=500,
             detail="BACKEND_ACCESS_TOKEN_SECRET environment variable is not configured.",
-        )
-    return secret
+        ) from exc
 
 
 def create_service_access_token(user_id: int) -> str:

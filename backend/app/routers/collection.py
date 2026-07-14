@@ -1,7 +1,9 @@
 import base64
 import hashlib
+import logging
 import os
 import re
+import asyncio
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -16,23 +18,35 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.core.config import get_backend_access_token_secret
 from app.dependencies.auth_helper import get_current_user
 from app.models.async_job import AsyncJob
 from app.models.evidence import Evidence
 from app.models.portfolio import PortfolioSource, ProjectSourceLink, SourceDocument
 from app.models.project import Project
 from app.models.user import OAuthAccount, User
-from app.services.embedding_service import create_embedding
+from app.services.embedding_service import create_embedding_async
 from app.services.llm_pipeline import enrich_project_via_llm
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 router = APIRouter(prefix="/github", tags=["github"])
+logger = logging.getLogger(__name__)
 
 GITHUB_API_URL = "https://api.github.com"
 MAX_REPOSITORIES = 20
 MAX_README_CHARS = 12000
 MAX_EVIDENCE_CHARS = 8000
+README_FETCH_CONCURRENCY = 6
+PROJECT_ENRICHMENT_CONCURRENCY = 4
+PROJECT_EMBEDDING_CONCURRENCY = 4
+
+
+def _env_int(name: str, default: int, minimum: int = 1) -> int:
+    try:
+        return max(minimum, int(os.getenv(name, str(default))))
+    except ValueError:
+        return default
 
 
 FULL_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
@@ -83,7 +97,16 @@ def _error_detail(code: str, detail: str) -> dict:
 
 
 def _decrypt_oauth_token(encrypted_token: str) -> str:
-    secret = os.getenv("BACKEND_ACCESS_TOKEN_SECRET", "dev-secret-change-me")
+    try:
+        secret = get_backend_access_token_secret()
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=_error_detail(
+                "BACKEND_SECRET_NOT_CONFIGURED",
+                "Backend access token secret is not configured.",
+            ),
+        ) from exc
     key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode("utf-8")).digest())
     try:
         return Fernet(key).decrypt(encrypted_token.encode("utf-8")).decode("utf-8")
@@ -144,7 +167,7 @@ async def _fetch_repositories(access_token: str) -> list[dict[str, Any]]:
                 "affiliation": "owner,collaborator,organization_member",
                 "sort": "updated",
                 "direction": "desc",
-                "per_page": MAX_REPOSITORIES,
+                "per_page": _env_int("GITHUB_MAX_REPOSITORIES", MAX_REPOSITORIES),
             },
         )
 
@@ -238,6 +261,21 @@ async def _fetch_readme(access_token: str, full_name: str) -> str:
     return response.text[:MAX_README_CHARS]
 
 
+async def _fetch_readmes(
+    access_token: str,
+    full_names: list[str],
+) -> dict[str, str]:
+    concurrency = _env_int("GITHUB_README_FETCH_CONCURRENCY", README_FETCH_CONCURRENCY)
+    semaphore = asyncio.Semaphore(concurrency)
+
+    async def fetch_one(full_name: str) -> tuple[str, str]:
+        async with semaphore:
+            return full_name, await _fetch_readme(access_token, full_name)
+
+    pairs = await asyncio.gather(*(fetch_one(full_name) for full_name in full_names))
+    return dict(pairs)
+
+
 def _skills_from_repo(repo: dict[str, Any]) -> list[str]:
     skills: list[str] = []
     language = repo.get("language")
@@ -303,12 +341,14 @@ def _project_embedding_text(project: Project) -> str:
     return "\n".join(parts)
 
 
-def _try_create_embedding(text: str) -> list[float] | None:
+async def _try_create_embedding_async(text: str) -> list[float] | None:
     if not os.getenv("OPENROUTER_API_KEY"):
+        logger.info("Skipping project embedding because OPENROUTER_API_KEY is not configured.")
         return None
     try:
-        return create_embedding(text)
-    except Exception:
+        return await create_embedding_async(text)
+    except Exception as exc:
+        logger.warning("Project embedding generation failed: %s", exc)
         return None
 
 
@@ -326,7 +366,6 @@ def _upsert_project(current_user: User, repo: dict[str, Any], readme_text: str, 
     description = repo.get("description")
     skills = _skills_from_repo(repo)
     summary_text = _project_summary_text(repo, readme_text)
-    summary_embedding = _try_create_embedding(summary_text)
 
     if project is None:
         project = Project(
@@ -337,7 +376,7 @@ def _upsert_project(current_user: User, repo: dict[str, Any], readme_text: str, 
             skills=skills,
             achievements=[],
             summary_text=summary_text,
-            summary_embedding=summary_embedding,
+            summary_embedding=None,
             source_type="github",
             source_url=source_url if isinstance(source_url, str) else None,
         )
@@ -349,8 +388,6 @@ def _upsert_project(current_user: User, repo: dict[str, Any], readme_text: str, 
     project.description = description if isinstance(description, str) else project.description
     project.skills = skills
     project.summary_text = summary_text
-    if summary_embedding is not None:
-        project.summary_embedding = summary_embedding
     project.source_type = "github"
     project.source_url = source_url if isinstance(source_url, str) else project.source_url
     project.is_archived = False
@@ -364,7 +401,7 @@ def _create_source_records(
     repo: dict[str, Any],
     readme_text: str,
     db: Session,
-) -> None:
+) -> Evidence:
     source_document = SourceDocument(
         portfolio_source_id=portfolio_source.id,
         document_type="readme",
@@ -392,45 +429,53 @@ def _create_source_records(
         )
     )
 
-    db.add(
-        Evidence(
-            source_document_id=source_document.id,
-            project_id=project.id,
-            source_type="github",
-            source_url=repo.get("html_url"),
-            title=source_document.title,
-            content=_evidence_content(repo, readme_text),
-            metadata_={
-                "githubRepoId": repo.get("id"),
-                "fullName": repo.get("full_name"),
-            },
-        )
+    evidence = Evidence(
+        source_document_id=source_document.id,
+        project_id=project.id,
+        source_type="github",
+        source_url=repo.get("html_url"),
+        title=source_document.title,
+        content=_evidence_content(repo, readme_text),
+        metadata_={
+            "githubRepoId": repo.get("id"),
+            "fullName": repo.get("full_name"),
+        },
     )
-
-
-async def _apply_llm_enrichment(project: Project, db: Session) -> None:
+    db.add(evidence)
     db.flush()
-    evidences = list(
-        db.scalars(select(Evidence).where(Evidence.project_id == project.id))
-    )
-    enrichment = await enrich_project_via_llm(project, evidences)
-    if enrichment is None:
-        return
+    return evidence
 
-    if enrichment["role"] is not None:
+
+async def _enrich_project_with_limit(
+    project: Project,
+    evidences: list[Evidence],
+    semaphore: asyncio.Semaphore,
+) -> tuple[Project, dict | None]:
+    async with semaphore:
+        return project, await enrich_project_via_llm(project, evidences)
+
+
+def _apply_project_enrichment(project: Project, enrichment: dict | None) -> None:
+    if enrichment is not None and enrichment["role"] is not None:
         project.role = enrichment["role"]
-    if enrichment["description"] is not None:
+    if enrichment is not None and enrichment["description"] is not None:
         project.description = enrichment["description"]
-    if enrichment["skills"]:
+    if enrichment is not None and enrichment["skills"]:
         project.skills = enrichment["skills"]
-    project.achievements = enrichment["achievements"]
+    if enrichment is not None:
+        project.achievements = enrichment["achievements"]
 
     project.summary_text = _project_embedding_text(project)
-    embedding = _try_create_embedding(project.summary_text)
-    if embedding is not None:
-        project.summary_embedding = embedding
 
-    db.flush()
+
+async def _create_project_embedding_with_limit(
+    project: Project,
+    semaphore: asyncio.Semaphore,
+) -> tuple[Project, list[float] | None]:
+    async with semaphore:
+        if not project.summary_text:
+            return project, None
+        return project, await _try_create_embedding_async(project.summary_text)
 
 
 async def _collect_github_projects(
@@ -453,6 +498,7 @@ async def _collect_github_projects(
 
     repos = await _fetch_repositories(access_token)
     collected_projects: list[Project] = []
+    repos_to_collect: list[dict[str, Any]] = []
     for repo in repos:
         if not isinstance(repo, dict):
             continue
@@ -474,11 +520,57 @@ async def _collect_github_projects(
             collected_projects.append(existing_project)
             continue
 
-        readme_text = await _fetch_readme(access_token, full_name)
+        repos_to_collect.append(repo)
+
+    readmes_by_full_name = await _fetch_readmes(
+        access_token,
+        [
+            repo["full_name"]
+            for repo in repos_to_collect
+            if isinstance(repo.get("full_name"), str)
+        ],
+    )
+
+    projects_to_enrich: list[tuple[Project, list[Evidence]]] = []
+    for repo in repos_to_collect:
+        full_name = repo.get("full_name")
+        if not isinstance(full_name, str):
+            continue
+
+        readme_text = readmes_by_full_name.get(full_name, "")
         project = _upsert_project(current_user, repo, readme_text, db)
-        _create_source_records(portfolio_source, project, repo, readme_text, db)
-        await _apply_llm_enrichment(project, db)
+        evidence = _create_source_records(portfolio_source, project, repo, readme_text, db)
+        projects_to_enrich.append((project, [evidence]))
         collected_projects.append(project)
+
+    enrichment_concurrency = _env_int(
+        "PROJECT_ENRICHMENT_CONCURRENCY",
+        PROJECT_ENRICHMENT_CONCURRENCY,
+    )
+    enrichment_semaphore = asyncio.Semaphore(enrichment_concurrency)
+    enrichment_results = await asyncio.gather(
+        *(
+            _enrich_project_with_limit(project, evidences, enrichment_semaphore)
+            for project, evidences in projects_to_enrich
+        )
+    )
+    for project, enrichment in enrichment_results:
+        _apply_project_enrichment(project, enrichment)
+
+    embedding_concurrency = _env_int(
+        "PROJECT_EMBEDDING_CONCURRENCY",
+        PROJECT_EMBEDDING_CONCURRENCY,
+    )
+    embedding_semaphore = asyncio.Semaphore(embedding_concurrency)
+    embedding_results = await asyncio.gather(
+        *(
+            _create_project_embedding_with_limit(project, embedding_semaphore)
+            for project, _ in projects_to_enrich
+        )
+    )
+    for project, embedding in embedding_results:
+        if embedding is not None:
+            project.summary_embedding = embedding
 
     portfolio_source.status = "completed"
     portfolio_source.metadata_ = {
@@ -537,7 +629,8 @@ async def create_github_collection_job(
         job.status = "failed"
         job.message = "GitHub project collection failed."
         job.error_code = "GITHUB_REPOSITORY_FETCH_FAILED"
-        job.error_detail = str(exc)
+        job.error_detail = "Failed to collect GitHub repositories."
+        logger.exception("Unexpected GitHub project collection failure.")
         db.commit()
         raise HTTPException(
             status_code=502,
@@ -646,8 +739,12 @@ async def add_github_repository(
     db.flush()
 
     project = _upsert_project(current_user, repo, readme_text, db)
-    _create_source_records(portfolio_source, project, repo, readme_text, db)
-    await _apply_llm_enrichment(project, db)
+    evidence = _create_source_records(portfolio_source, project, repo, readme_text, db)
+    enrichment = await enrich_project_via_llm(project, [evidence])
+    _apply_project_enrichment(project, enrichment)
+    embedding = await _try_create_embedding_async(project.summary_text or "")
+    if embedding is not None:
+        project.summary_embedding = embedding
 
     portfolio_source.status = "completed"
     portfolio_source.metadata_ = {

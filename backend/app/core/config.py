@@ -23,6 +23,28 @@ class Settings:
         return value
 
 
+def is_production() -> bool:
+    return os.getenv("APP_ENV", os.getenv("ENV", "development")).lower() in {
+        "prod",
+        "production",
+    }
+
+
+def is_debug_enabled() -> bool:
+    return os.getenv("ENABLE_DEBUG_ROUTES", "").lower() in {"1", "true", "yes", "on"}
+
+
+def get_backend_access_token_secret() -> str:
+    secret = os.getenv("BACKEND_ACCESS_TOKEN_SECRET")
+    if secret:
+        return secret
+    if is_production():
+        raise RuntimeError(
+            "BACKEND_ACCESS_TOKEN_SECRET environment variable is required in production."
+        )
+    return "dev-secret-change-me"
+
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()

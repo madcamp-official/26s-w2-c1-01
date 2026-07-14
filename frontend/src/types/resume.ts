@@ -13,7 +13,7 @@ export interface SuggestedProject {
   title: string;
   description: string;
   targetSkills: string[];
-  estimatedDuration: string;
+  estimatedDuration?: string | null;
   reason: string;
 }
 

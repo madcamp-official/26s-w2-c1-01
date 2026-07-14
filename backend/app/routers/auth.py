@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.core.config import get_backend_access_token_secret
 from app.dependencies.auth_helper import create_service_access_token, get_current_user
 from app.models.user import OAuthAccount, User
 
@@ -43,7 +44,13 @@ def _github_redirect_uri() -> str:
 
 
 def _encrypt_oauth_token(token: str) -> str:
-    secret = _get_env("BACKEND_ACCESS_TOKEN_SECRET", "dev-secret-change-me")
+    try:
+        secret = get_backend_access_token_secret()
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="BACKEND_ACCESS_TOKEN_SECRET environment variable is not configured.",
+        ) from exc
     key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode("utf-8")).digest())
     return Fernet(key).encrypt(token.encode("utf-8")).decode("utf-8")
 

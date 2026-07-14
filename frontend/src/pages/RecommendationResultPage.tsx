@@ -229,10 +229,6 @@ export function RecommendationResultPage() {
                   <div className="result-gap-fields">
                     <span className="result-gap-label">핵심 내용</span>
                     <span className="result-gap-value">{gap.description}</span>
-                    <span className="result-gap-label">예상 기간</span>
-                    <span className="result-gap-value">{gap.estimatedDuration}</span>
-                    <span className="result-gap-label">추천 이유</span>
-                    <span className="result-gap-value">{gap.reason}</span>
                   </div>
                 </div>
               ))}

@@ -1,5 +1,6 @@
 import base64
 import binascii
+import logging
 import re
 import os
 from html import unescape
@@ -23,6 +24,7 @@ from app.services.llm_pipeline import (
 )
 
 router = APIRouter(prefix="/job-postings", tags=["job-postings"])
+logger = logging.getLogger(__name__)
 
 JOB_POSTING_FETCH_TIMEOUT_SECONDS = 10.0
 MIN_EXTRACTED_TEXT_LENGTH = 80
@@ -231,10 +233,12 @@ def _raise_insufficient_url_content() -> None:
 
 def _try_create_embedding(text: str) -> list[float] | None:
     if not os.getenv("OPENROUTER_API_KEY"):
+        logger.info("Skipping job posting embedding because OPENROUTER_API_KEY is not configured.")
         return None
     try:
         return create_embedding(text)
-    except Exception:
+    except Exception as exc:
+        logger.warning("Job posting embedding generation failed: %s", exc)
         return None
 
 

@@ -1,4 +1,5 @@
 import json
+import logging
 from collections import OrderedDict
 from typing import Any
 
@@ -6,6 +7,8 @@ from app.models.evidence import Evidence
 from app.models.job_posting import JobPosting
 from app.models.project import Project
 from app.services.llm_client import LLMError, complete_json
+
+logger = logging.getLogger(__name__)
 
 KNOWN_SKILLS = [
     "Python",
@@ -142,7 +145,8 @@ async def enrich_project_via_llm(project: Project, evidences: list[Evidence]) ->
             PROJECT_ENRICHMENT_SYSTEM_PROMPT,
             json.dumps(payload, ensure_ascii=False),
         )
-    except LLMError:
+    except LLMError as exc:
+        logger.warning("Project enrichment LLM call failed: %s", exc.message)
         return None
     return parse_project_enrichment(result)
 
@@ -199,7 +203,8 @@ async def structure_job_posting_via_llm(raw_text: str) -> dict | None:
             JOB_POSTING_STRUCTURE_SYSTEM_PROMPT,
             json.dumps(payload, ensure_ascii=False),
         )
-    except LLMError:
+    except LLMError as exc:
+        logger.warning("Job posting structure LLM call failed: %s", exc.message)
         return None
     return parse_job_posting_structure(result)
 
@@ -241,7 +246,8 @@ async def structure_job_posting_from_image(image_data_urls: list[str]) -> dict |
             "Transcribe and structure the job posting shown in the attached image(s).",
             image_data_urls=image_data_urls,
         )
-    except LLMError:
+    except LLMError as exc:
+        logger.warning("Job posting image structure LLM call failed: %s", exc.message)
         return None
 
     parsed = parse_job_posting_image_structure(result)
@@ -410,6 +416,139 @@ def validate_project_recommendations(
     return safe_recommendations
 
 
+RECOMMENDATION_REASON_SYSTEM_PROMPT = (
+    "You are a technical recruiter explaining why a user's project matches a job posting. "
+    "Use only the provided job posting, project, scoring data, and source documents. Do not "
+    "invent tools, metrics, users, outcomes, or responsibilities. For each evidence item, use "
+    "a concrete source document snippet when the source document directly supports the claim. "
+    "If no source document supports a claim, use structured project fields and set "
+    "sourceDocumentId to null. "
+    'Respond with a single JSON object: {"reason": string, "evidences": [{"requirement": '
+    'string, "matchType": "skill" | "semantic" | "missing", "sourceDocumentId": number | null, '
+    '"content": string, "source": string, "explanation": string}]}. '
+    "Write reason and explanation in Korean, concise and recruiter-facing. Return JSON only."
+)
+
+
+def build_recommendation_reason_payload(
+    job_posting: JobPosting,
+    project: Project,
+    recommendation: dict,
+    source_documents: list[Any],
+) -> dict:
+    return {
+        "task": "recommendation_reason_generation",
+        "instructions": [
+            "Use only the provided jobPosting, project, scoring, and sourceDocuments.",
+            "Create evidences that explain why this project was recommended for this job posting.",
+            "For missing skills, explain that the project does not currently provide clear support.",
+            "Do not invent metrics, achievements, tools, or project history.",
+        ],
+        "jobPosting": {
+            "jobPostingId": job_posting.id,
+            "role": job_posting.role,
+            "requiredSkills": job_posting.required_skills,
+            "preferredSkills": job_posting.preferred_skills,
+            "competencies": job_posting.competencies,
+            "rawText": job_posting.raw_text[:4000],
+        },
+        "project": {
+            "projectId": project.id,
+            "title": project.title,
+            "description": project.description,
+            "role": project.role,
+            "skills": project.skills,
+            "achievements": project.achievements,
+        },
+        "scoring": {
+            "score": recommendation.get("score"),
+            "matchedSkills": recommendation.get("matchedSkills", []),
+            "missingSkills": recommendation.get("missingSkills", []),
+            "ruleAndVectorReason": recommendation.get("reason"),
+        },
+        "sourceDocuments": [
+            {
+                "sourceDocumentId": source_document.id,
+                "title": source_document.title,
+                "documentType": source_document.document_type,
+                "url": source_document.url,
+                "rawText": source_document.raw_text[:6000],
+            }
+            for source_document in source_documents
+        ],
+    }
+
+
+def parse_recommendation_reason(result: dict) -> dict:
+    reason = result.get("reason")
+    parsed_evidences: list[dict] = []
+    if isinstance(result.get("evidences"), list):
+        for evidence in result["evidences"]:
+            if not isinstance(evidence, dict):
+                continue
+            requirement = evidence.get("requirement")
+            match_type = evidence.get("matchType")
+            content = evidence.get("content")
+            source = evidence.get("source")
+            explanation = evidence.get("explanation")
+            source_document_id = evidence.get("sourceDocumentId")
+            if match_type not in {"skill", "semantic", "missing"}:
+                continue
+            if not all(isinstance(value, str) and value.strip() for value in [requirement, content, source, explanation]):
+                continue
+            parsed_evidences.append(
+                {
+                    "requirement": requirement.strip(),
+                    "matchType": match_type,
+                    "sourceDocumentId": source_document_id if isinstance(source_document_id, int) else None,
+                    "content": content.strip(),
+                    "source": source.strip(),
+                    "explanation": explanation.strip(),
+                }
+            )
+
+    return {
+        "reason": reason.strip() if isinstance(reason, str) and reason.strip() else None,
+        "evidences": parsed_evidences,
+    }
+
+
+async def generate_recommendation_reason_via_llm(
+    job_posting: JobPosting,
+    project: Project,
+    recommendation: dict,
+    source_documents: list[Any],
+) -> dict | None:
+    payload = build_recommendation_reason_payload(
+        job_posting,
+        project,
+        recommendation,
+        source_documents,
+    )
+    try:
+        result = await complete_json(
+            RECOMMENDATION_REASON_SYSTEM_PROMPT,
+            json.dumps(payload, ensure_ascii=False),
+        )
+    except LLMError as exc:
+        logger.warning("Recommendation reason LLM call failed: %s", exc.message)
+        return None
+    return parse_recommendation_reason(result)
+
+
+RESUME_GENERATION_SYSTEM_PROMPT = (
+    "You are a Korean technical resume writer. Generate resume sections tailored to the given "
+    "job posting using only the selected projects and provided evidence. Do not invent metrics, "
+    "achievements, tools, dates, or impact. Every concrete claim must be supported by project "
+    "fields or evidenceIds. Emphasize requirements from the job posting, and clearly avoid "
+    "unsupported skills. "
+    'Respond with a single JSON object: {"summary": string, "sections": [{"sectionType": '
+    'string, "projectId": number | null, "heading": string, "content": string, "evidenceIds": '
+    'number[]}], "warnings": string[]}. '
+    "Write in natural Korean resume style. Return JSON only."
+)
+
+
 def build_resume_generation_payload(
     job_posting: JobPosting,
     projects: list[Project],
@@ -429,6 +568,7 @@ def build_resume_generation_payload(
             "requiredSkills": job_posting.required_skills,
             "preferredSkills": job_posting.preferred_skills,
             "competencies": job_posting.competencies,
+            "rawText": job_posting.raw_text[:4000],
         },
         "selectedProjects": [
             {
@@ -443,6 +583,8 @@ def build_resume_generation_payload(
                         "evidenceId": evidence.id,
                         "title": evidence.title,
                         "content": evidence.content,
+                        "sourceType": evidence.source_type,
+                        "metadata": evidence.metadata_,
                     }
                     for evidence in evidence_by_project.get(project.id, [])
                 ],
@@ -450,6 +592,179 @@ def build_resume_generation_payload(
             for project in projects
         ],
     }
+
+
+def parse_resume_generation(result: dict) -> dict:
+    summary = result.get("summary")
+    sections = result.get("sections")
+    warnings = result.get("warnings")
+    safe_sections: list[dict] = []
+
+    if isinstance(sections, list):
+        for section in sections:
+            if not isinstance(section, dict):
+                continue
+            heading = section.get("heading")
+            content = section.get("content")
+            if not isinstance(heading, str) or not heading.strip():
+                continue
+            if not isinstance(content, str) or not content.strip():
+                continue
+            project_id = section.get("projectId")
+            safe_sections.append(
+                {
+                    "sectionType": (
+                        section.get("sectionType")
+                        if isinstance(section.get("sectionType"), str) and section.get("sectionType").strip()
+                        else "project"
+                    ),
+                    "projectId": project_id if isinstance(project_id, int) else None,
+                    "heading": heading.strip(),
+                    "content": content.strip(),
+                    "evidenceIds": [
+                        evidence_id
+                        for evidence_id in section.get("evidenceIds", [])
+                        if isinstance(evidence_id, int)
+                    ]
+                    if isinstance(section.get("evidenceIds"), list)
+                    else [],
+                }
+            )
+
+    return {
+        "summary": summary.strip() if isinstance(summary, str) and summary.strip() else None,
+        "sections": safe_sections,
+        "warnings": json_list_to_strings(warnings),
+    }
+
+
+async def generate_resume_sections_via_llm(
+    job_posting: JobPosting,
+    projects: list[Project],
+    evidence_by_project: dict[int, list[Evidence]],
+) -> dict | None:
+    payload = build_resume_generation_payload(job_posting, projects, evidence_by_project)
+    try:
+        result = await complete_json(
+            RESUME_GENERATION_SYSTEM_PROMPT,
+            json.dumps(payload, ensure_ascii=False),
+        )
+    except LLMError as exc:
+        logger.warning("Resume generation LLM call failed: %s", exc.message)
+        return None
+    return parse_resume_generation(result)
+
+
+GAP_PROJECT_SUGGESTION_SYSTEM_PROMPT = (
+    "You are a Korean technical mentor suggesting concrete portfolio projects to fill missing "
+    "job-posting skills. Use the provided job posting, selected projects, evidence, and missing "
+    "skills. Suggest practical, buildable projects that directly demonstrate the missing skills. "
+    "Do not suggest vague projects like 'make a small service'; each suggestion must name a "
+    "specific product or workflow and concrete features. Do not invent experience the user "
+    "already has. "
+    'Respond with a single JSON object: {"suggestedProjects": [{"title": string, '
+    '"description": string, "targetSkills": string[], "reason": string}]}. '
+    "Write in Korean. Return JSON only."
+)
+
+
+def build_gap_project_suggestion_payload(
+    job_posting: JobPosting,
+    projects: list[Project],
+    evidence_by_project: dict[int, list[Evidence]],
+    missing_skills: list[str],
+) -> dict:
+    payload = build_resume_generation_payload(job_posting, projects, evidence_by_project)
+    payload["task"] = "gap_project_suggestion"
+    payload["missingSkills"] = missing_skills
+    payload["instructions"] = [
+        "Suggest one concrete project per missing skill unless one project naturally covers multiple missing skills.",
+        "Each project must be specific enough that a student can start building it immediately.",
+        "Focus on concrete features, data handled, APIs, infrastructure, or UI flows.",
+        "Do not include estimated duration.",
+    ]
+    return payload
+
+
+def parse_gap_project_suggestions(result: dict, missing_skills: list[str]) -> list[dict]:
+    allowed_skills = {skill.casefold(): skill for skill in missing_skills}
+    suggestions = result.get("suggestedProjects")
+    safe_suggestions: list[dict] = []
+    if not isinstance(suggestions, list):
+        return safe_suggestions
+
+    for suggestion in suggestions:
+        if not isinstance(suggestion, dict):
+            continue
+        title = suggestion.get("title")
+        description = suggestion.get("description")
+        if not isinstance(title, str) or not title.strip():
+            continue
+        if not isinstance(description, str) or not description.strip():
+            continue
+
+        target_skills = []
+        if isinstance(suggestion.get("targetSkills"), list):
+            for skill in suggestion["targetSkills"]:
+                if not isinstance(skill, str):
+                    continue
+                skill_key = skill.casefold()
+                canonical_skill = allowed_skills.get(skill_key)
+                if canonical_skill is None:
+                    canonical_skill = next(
+                        (
+                            missing_skill
+                            for missing_key, missing_skill in allowed_skills.items()
+                            if missing_key in skill_key or skill_key in missing_key
+                        ),
+                        None,
+                    )
+                if canonical_skill and canonical_skill not in target_skills:
+                    target_skills.append(canonical_skill)
+        if not target_skills:
+            continue
+
+        reason = suggestion.get("reason")
+        safe_suggestions.append(
+            {
+                "title": title.strip(),
+                "description": description.strip(),
+                "targetSkills": target_skills,
+                "reason": (
+                    reason.strip()
+                    if isinstance(reason, str) and reason.strip()
+                    else f"{', '.join(target_skills)} 활용 경험을 보완하기 위한 프로젝트입니다."
+                ),
+            }
+        )
+
+    return safe_suggestions
+
+
+async def generate_gap_project_suggestions_via_llm(
+    job_posting: JobPosting,
+    projects: list[Project],
+    evidence_by_project: dict[int, list[Evidence]],
+    missing_skills: list[str],
+) -> list[dict]:
+    if not missing_skills:
+        return []
+
+    payload = build_gap_project_suggestion_payload(
+        job_posting,
+        projects,
+        evidence_by_project,
+        missing_skills,
+    )
+    try:
+        result = await complete_json(
+            GAP_PROJECT_SUGGESTION_SYSTEM_PROMPT,
+            json.dumps(payload, ensure_ascii=False),
+        )
+    except LLMError as exc:
+        logger.warning("Gap project suggestion LLM call failed: %s", exc.message)
+        return []
+    return parse_gap_project_suggestions(result, missing_skills)
 
 
 def validate_resume_sections(

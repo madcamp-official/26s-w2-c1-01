@@ -6,12 +6,95 @@ from app.models.job_posting import JobPosting
 from app.models.project import Project
 from app.services.llm_pipeline import json_list_to_strings, unique_strings
 
-RULE_SCORE_WEIGHT = 0.6
-VECTOR_SCORE_WEIGHT = 0.4
+RULE_SCORE_WEIGHT = 0.4
+VECTOR_SCORE_WEIGHT = 0.6
+RULE_SCORE_SATURATION_EXPONENT = 0.65
+
+SKILL_ALIASES = {
+    "amazon web services": "aws",
+    "ec2": "aws",
+    "lambda": "aws",
+    "s3": "aws",
+    "aws s3": "aws",
+    "aws ec2": "aws",
+    "aws lambda": "aws",
+    "js": "javascript",
+    "javascript": "javascript",
+    "node": "node.js",
+    "nodejs": "node.js",
+    "node.js": "node.js",
+    "postgres": "postgresql",
+    "postgresql": "postgresql",
+    "react": "react",
+    "reactjs": "react",
+    "react.js": "react",
+    "springboot": "spring boot",
+    "spring boot": "spring boot",
+    "ts": "typescript",
+    "typescript": "typescript",
+}
 
 
 def _clamp_score(value: float) -> float:
     return max(0.0, min(1.0, value))
+
+
+def _normalize_skill(skill: str) -> str:
+    normalized = " ".join(
+        skill.casefold()
+        .replace("_", " ")
+        .replace("-", " ")
+        .replace("/", " ")
+        .split()
+    )
+    compact = normalized.replace(" ", "")
+    return SKILL_ALIASES.get(normalized) or SKILL_ALIASES.get(compact) or normalized
+
+
+def _skill_tokens(skill: str) -> set[str]:
+    normalized = _normalize_skill(skill)
+    tokens = set(normalized.replace(".", " ").split())
+    tokens.add(normalized)
+    compact = normalized.replace(" ", "").replace(".", "")
+    if compact:
+        tokens.add(compact)
+    return tokens
+
+
+def _skills_match(target_skill: str, project_skill: str) -> bool:
+    target_normalized = _normalize_skill(target_skill)
+    project_normalized = _normalize_skill(project_skill)
+    if target_normalized == project_normalized:
+        return True
+
+    target_tokens = _skill_tokens(target_skill)
+    project_tokens = _skill_tokens(project_skill)
+    if target_normalized in project_tokens or project_normalized in target_tokens:
+        return True
+
+    target_compact = target_normalized.replace(" ", "").replace(".", "")
+    project_compact = project_normalized.replace(" ", "").replace(".", "")
+    if not target_compact or not project_compact:
+        return False
+
+    return (
+        target_compact in project_compact
+        and len(target_compact) >= 3
+    ) or (
+        project_compact in target_compact
+        and len(project_compact) >= 3
+    )
+
+
+def _has_skill_match(target_skill: str, project_skills: list[str]) -> bool:
+    return any(_skills_match(target_skill, project_skill) for project_skill in project_skills)
+
+
+def _saturated_coverage_score(matched_count: int, total_count: int) -> float:
+    if total_count <= 0:
+        return 0.0
+    coverage = matched_count / total_count
+    return _clamp_score(coverage ** RULE_SCORE_SATURATION_EXPONENT)
 
 
 def _rule_match(
@@ -25,15 +108,18 @@ def _rule_match(
         return 0.0, [], []
 
     project_skills = json_list_to_strings(project.skills)
-    project_skill_lookup = {skill.casefold() for skill in project_skills}
     matched_skills = [
-        skill for skill in target_skills if skill.casefold() in project_skill_lookup
+        skill for skill in target_skills if _has_skill_match(skill, project_skills)
     ]
     missing_skills = [
-        skill for skill in required_skills if skill.casefold() not in project_skill_lookup
+        skill for skill in required_skills if not _has_skill_match(skill, project_skills)
     ]
 
-    return len(matched_skills) / len(target_skills), matched_skills, missing_skills
+    return (
+        _saturated_coverage_score(len(matched_skills), len(target_skills)),
+        matched_skills,
+        missing_skills,
+    )
 
 
 def _vector_scores(
