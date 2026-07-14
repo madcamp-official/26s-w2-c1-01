@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import is_debug_enabled
-from app.routers import projects, job_postings, analysis, resumes, auth, evidences, collection
+from app.routers import projects, job_postings, analysis, resumes, auth, evidences, collection, cvs
 
 
 
@@ -25,6 +25,7 @@ app.include_router(resumes.router)
 app.include_router(auth.router)
 app.include_router(evidences.router)
 app.include_router(collection.router)
+app.include_router(cvs.router)
 if is_debug_enabled():
     from app.routers import debug_github
 

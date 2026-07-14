@@ -237,6 +237,13 @@
   color: var(--accent-ink);
 }
 
+.input-cv-message {
+  margin: 12px 0 0;
+  color: var(--ink-sub);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
 .input-fixed-cta {
   position: fixed;
   left: 0;

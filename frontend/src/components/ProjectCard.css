@@ -85,6 +85,46 @@
   flex-wrap: wrap;
 }
 
+.project-card__add-chip {
+  border: 1px dashed var(--border-dashed);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.project-card__skill-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+}
+
+.project-card__skill-input {
+  width: 118px;
+  height: 28px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 0 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.project-card__skill-save {
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 0 10px;
+  background: var(--primary);
+  color: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .project-card__field {
   border: none;
   font-family: inherit;

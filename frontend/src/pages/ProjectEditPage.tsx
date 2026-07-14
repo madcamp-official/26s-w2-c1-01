@@ -110,7 +110,7 @@ export function ProjectEditPage() {
                 onRoleChange={(role) => updateProject(project.projectId, { role })}
                 onDescriptionChange={(description) => updateProject(project.projectId, { description })}
                 onAchievementsChange={(achievements) => updateProject(project.projectId, { achievements })}
-                onAddSkill={() => addSkill(project.projectId, "새 스택")}
+                onAddSkill={(skill) => addSkill(project.projectId, skill)}
                 onToggleExclude={() => toggleExcluded(project.projectId)}
               />
             ))}

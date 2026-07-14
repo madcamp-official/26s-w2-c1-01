@@ -209,6 +209,98 @@ async def structure_job_posting_via_llm(raw_text: str) -> dict | None:
     return parse_job_posting_structure(result)
 
 
+MAX_CV_LLM_CHARS = 12000
+
+CV_STRUCTURE_SYSTEM_PROMPT = (
+    "You are a Korean technical recruiter structuring a candidate CV. "
+    "Given raw text extracted from a PDF CV, split the content into exactly these six fields: "
+    "basic_info, education, certificates, career, activities, projects. "
+    "Use only the provided CV text. Do not invent dates, schools, companies, certifications, "
+    "projects, skills, metrics, or responsibilities. Preserve concrete details from the CV, "
+    "but remove obvious PDF extraction noise, repeated headers/footers, and navigation-like junk. "
+    "If a section is not present, return an empty string for that field. "
+    "Classify internships and employment under career. Classify clubs, hackathons, volunteering, "
+    "student organizations, contests, and external programs under activities unless they are "
+    "described as standalone software projects. Classify standalone software/product/data/AI "
+    "projects under projects. Certifications, awards, licenses, language scores, and completed "
+    "courses may go under certificates when they are listed as credentials. "
+    'Respond with a single JSON object: {"sections": {"basic_info": string, "education": '
+    'string, "certificates": string, "career": string, "activities": string, "projects": '
+    "string}}. "
+    "Write section content in Korean when the source text is Korean; otherwise preserve the "
+    "source language. Return JSON only."
+)
+
+
+def build_cv_structure_payload(raw_text: str) -> dict:
+    return {
+        "task": "cv_structure",
+        "instructions": [
+            "Split the PDF CV text into exactly six sections.",
+            "Use only facts present in the CV text.",
+            "Return empty strings for missing sections.",
+            "Do not summarize away concrete project, career, date, role, or skill details.",
+        ],
+        "sectionSchema": [
+            "basic_info",
+            "education",
+            "certificates",
+            "career",
+            "activities",
+            "projects",
+        ],
+        "cvText": raw_text[:MAX_CV_LLM_CHARS],
+    }
+
+
+def parse_cv_structure(result: dict) -> dict[str, str]:
+    section_keys = [
+        "basic_info",
+        "education",
+        "certificates",
+        "career",
+        "activities",
+        "projects",
+    ]
+    raw_sections = result.get("sections")
+    parsed = {key: "" for key in section_keys}
+
+    if isinstance(raw_sections, dict):
+        for key in section_keys:
+            value = raw_sections.get(key)
+            if isinstance(value, str):
+                parsed[key] = value.strip()
+        return parsed
+
+    if isinstance(raw_sections, list):
+        for item in raw_sections:
+            if not isinstance(item, dict):
+                continue
+            section_type = item.get("sectionType") or item.get("type") or item.get("key")
+            content = item.get("content") or item.get("text")
+            if section_type in parsed and isinstance(content, str):
+                parsed[section_type] = content.strip()
+
+    return parsed
+
+
+async def structure_cv_via_llm(raw_text: str) -> dict[str, str] | None:
+    if not raw_text.strip():
+        return None
+
+    payload = build_cv_structure_payload(raw_text)
+    try:
+        result = await complete_json(
+            CV_STRUCTURE_SYSTEM_PROMPT,
+            json.dumps(payload, ensure_ascii=False),
+            timeout=45.0,
+        )
+    except LLMError as exc:
+        logger.warning("CV structure LLM call failed: %s", exc.message)
+        return None
+    return parse_cv_structure(result)
+
+
 JOB_POSTING_IMAGE_SYSTEM_PROMPT = (
     "You are a technical recruiter analyzing a job posting that was published as an image "
     "(e.g. a recruiting poster/flyer). First, transcribe all visible text from the image as "
@@ -542,6 +634,9 @@ RESUME_GENERATION_SYSTEM_PROMPT = (
     "achievements, tools, dates, or impact. Every concrete claim must be supported by project "
     "fields or evidenceIds. Emphasize requirements from the job posting, and clearly avoid "
     "unsupported skills. "
+    "Do not put Markdown syntax inside section content: no headings, bullets, numbered lists, "
+    "tables, code fences, blockquotes, bold markers, or links. Put only clean plain Korean text "
+    "in each content field. "
     'Respond with a single JSON object: {"summary": string, "sections": [{"sectionType": '
     'string, "projectId": number | null, "heading": string, "content": string, "evidenceIds": '
     'number[]}], "warnings": string[]}. '
@@ -594,6 +689,28 @@ def build_resume_generation_payload(
     }
 
 
+def _clean_resume_plain_text(value: str) -> str:
+    lines = []
+    for raw_line in value.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        line = raw_line.strip()
+        if not line:
+            continue
+        line = line.strip("`")
+        while line.startswith("#"):
+            line = line[1:].strip()
+        for marker in ("- ", "* ", "• "):
+            if line.startswith(marker):
+                line = line[len(marker):].strip()
+        if len(line) > 2 and line[0].isdigit():
+            dot_index = line.find(". ")
+            if 0 < dot_index <= 3:
+                line = line[dot_index + 2 :].strip()
+        line = line.replace("**", "").replace("__", "").replace("```", "")
+        if line:
+            lines.append(line)
+    return " ".join(lines).strip()
+
+
 def parse_resume_generation(result: dict) -> dict:
     summary = result.get("summary")
     sections = result.get("sections")
@@ -610,6 +727,9 @@ def parse_resume_generation(result: dict) -> dict:
                 continue
             if not isinstance(content, str) or not content.strip():
                 continue
+            clean_content = _clean_resume_plain_text(content)
+            if not clean_content:
+                continue
             project_id = section.get("projectId")
             safe_sections.append(
                 {
@@ -619,8 +739,8 @@ def parse_resume_generation(result: dict) -> dict:
                         else "project"
                     ),
                     "projectId": project_id if isinstance(project_id, int) else None,
-                    "heading": heading.strip(),
-                    "content": content.strip(),
+                    "heading": _clean_resume_plain_text(heading) or heading.strip(),
+                    "content": clean_content,
                     "evidenceIds": [
                         evidence_id
                         for evidence_id in section.get("evidenceIds", [])
@@ -632,7 +752,7 @@ def parse_resume_generation(result: dict) -> dict:
             )
 
     return {
-        "summary": summary.strip() if isinstance(summary, str) and summary.strip() else None,
+        "summary": _clean_resume_plain_text(summary) if isinstance(summary, str) and summary.strip() else None,
         "sections": safe_sections,
         "warnings": json_list_to_strings(warnings),
     }

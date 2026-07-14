@@ -1,4 +1,4 @@
-export type ProjectSourceType = "github" | "notion" | "pdf";
+export type ProjectSourceType = "github" | "notion" | "pdf" | "cv";
 
 // GitHub 수집 단계에서 나오는 후보 — api-spec #6
 export interface CollectedProjectCandidate {

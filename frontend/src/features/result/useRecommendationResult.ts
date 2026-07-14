@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { RecommendedProject } from "../../types/analysis";
+import type { CvFit, RecommendedProject } from "../../types/analysis";
 import type { ParsedJobPosting } from "../../types/jobPosting";
 import type { ResumeResult } from "../../types/resume";
 import { getAnalysisJob } from "../../api/analysis";
@@ -7,6 +7,7 @@ import { startResumeJob, getResumeJob, getResumeResult } from "../../api/resume"
 
 export interface AnalysisData {
   jobPosting: ParsedJobPosting;
+  cvFit?: CvFit | null;
   recommendedProjects: RecommendedProject[];
 }
 
@@ -44,8 +45,8 @@ export function useRecommendationResult(jobId: number | undefined) {
       // api-spec.md #11 GET /analysis-jobs/{jobId}
       const result = await getAnalysisJob(jobId!);
       if (cancelled || !result.jobPosting || !result.recommendedProjects) return;
-      const { jobPosting, recommendedProjects } = result;
-      setAnalysis({ jobPosting, recommendedProjects });
+      const { jobPosting, recommendedProjects, cvFit } = result;
+      setAnalysis({ jobPosting, cvFit, recommendedProjects });
       setAnalysisLoading(false);
 
       // api-spec.md #12 POST /resume-jobs

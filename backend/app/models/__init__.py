@@ -1,5 +1,6 @@
 from app.models.analysis import AnalysisResult, RecommendationEvidence, RecommendedProject
 from app.models.async_job import AsyncJob
+from app.models.cv import CvDocument, CvSection
 from app.models.evidence import Evidence
 from app.models.job_posting import JobPosting, JobPostingAttachment
 from app.models.portfolio import PortfolioSource, ProjectSourceLink, SourceDocument
@@ -16,6 +17,8 @@ from app.models.user import OAuthAccount, User
 __all__ = [
     "AnalysisResult",
     "AsyncJob",
+    "CvDocument",
+    "CvSection",
     "Evidence",
     "JobPosting",
     "JobPostingAttachment",

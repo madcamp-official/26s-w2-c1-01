@@ -9,6 +9,7 @@ import { useAuth } from "../features/auth/useAuth";
 import { useProjects } from "../features/projects/useProjects";
 import { startGithubCollection } from "../api/github";
 import { registerJobPosting } from "../api/jobPosting";
+import { uploadCv } from "../api/cvs";
 import { ApiError } from "../api/client";
 import "./InputUploadPage.css";
 
@@ -44,7 +45,10 @@ export function InputUploadPage() {
   const { state: jobState, setMode, setUrl, setRawText, setImages } = useJobPosting();
   const [agreedToAnalyze, setAgreedToAnalyze] = useState(() => !hasExistingProjects);
   const [submitting, setSubmitting] = useState(false);
+  const [cvUploading, setCvUploading] = useState(false);
+  const [cvFileName, setCvFileName] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [cvMessage, setCvMessage] = useState<string | null>(null);
 
   const content =
     jobState.mode === "url"
@@ -55,7 +59,6 @@ export function InputUploadPage() {
   const hasJobPostingContent = Array.isArray(content)
     ? content.length > 0
     : content.trim().length > 0;
-  // 이미 수집된 프로젝트가 있으면 체크박스는 "새 레포 추가 수집" 여부일 뿐, 필수 동의가 아니에요.
   const willCollect = hasExistingProjects ? agreedToAnalyze : true;
   const canSubmit = (hasExistingProjects || agreedToAnalyze) && hasJobPostingContent && !submitting;
 
@@ -66,10 +69,8 @@ export function InputUploadPage() {
 
     try {
       if (willCollect) {
-        // api-spec.md #5 POST /github/collection-jobs
         await startGithubCollection(true);
       }
-      // api-spec.md #9 POST /job-postings
       const jobPosting = await registerJobPosting({
         inputType: jobState.mode,
         content: Array.isArray(content) ? content : content.trim(),
@@ -81,7 +82,7 @@ export function InputUploadPage() {
         setErrorMessage("채용공고 URL을 읽을 수 없어요. 이미지 업로드나 직접 입력으로 등록해 주세요.");
       } else if (err instanceof ApiError && err.code === "JOB_POSTING_URL_INSUFFICIENT") {
         setMode("image");
-        setErrorMessage("URL에서 핵심 자격요건을 충분히 읽지 못했어요. 공고 화면을 캡처해서 이미지로 올리거나 직접 입력해 주세요.");
+        setErrorMessage("URL에서 직무 요건을 충분히 읽지 못했어요. 공고 화면을 캡처해 올리거나 직접 입력해 주세요.");
       } else if (
         err instanceof ApiError &&
         (err.code === "JOB_POSTING_IMAGE_INVALID" || err.code === "JOB_POSTING_IMAGE_OCR_FAILED")
@@ -95,6 +96,27 @@ export function InputUploadPage() {
     }
   };
 
+  const handleCvChange = async (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    if (file.type !== "application/pdf") {
+      setCvMessage("PDF 파일만 업로드할 수 있습니다.");
+      return;
+    }
+
+    setCvUploading(true);
+    setCvMessage(null);
+    try {
+      const cv = await uploadCv(file);
+      setCvFileName(cv.fileName);
+      setCvMessage("CV가 분석에 반영되었습니다. 자세한 내용은 마이페이지의 CV 관리에서 수정할 수 있어요.");
+    } catch (err) {
+      setCvMessage(err instanceof Error ? err.message : "CV 업로드에 실패했습니다.");
+    } finally {
+      setCvUploading(false);
+    }
+  };
+
   const handleImageChange = async (files: FileList | null) => {
     setErrorMessage(null);
     const selectedFiles = Array.from(files ?? []);
@@ -104,7 +126,7 @@ export function InputUploadPage() {
     }
     if (selectedFiles.length > MAX_JOB_POSTING_IMAGE_COUNT) {
       setImages([], []);
-      setErrorMessage(`이미지는 최대 ${MAX_JOB_POSTING_IMAGE_COUNT}장까지 업로드할 수 있어요.`);
+      setErrorMessage(`이미지는 최대 ${MAX_JOB_POSTING_IMAGE_COUNT}개까지 업로드할 수 있어요.`);
       return;
     }
     if (selectedFiles.some((file) => !file.type.startsWith("image/"))) {
@@ -136,14 +158,12 @@ export function InputUploadPage() {
       <PageContainer maxWidth={760}>
         <p className="input-eyebrow">채용공고 맞춤 이력서 추천</p>
         <h1 className="input-title">
-          공고에 딱 맞는 이력서,
+          공고에 맞는 이력서,
           <br />
-          3분이면 충분해요
+          3단계로 준비해요
         </h1>
         <p className="input-subtitle">
-          GitHub 프로젝트를 수집하고 채용공고를 등록하면
-          <br />
-          강조할 경험과 이력서 초안을 근거와 함께 추천해 드려요.
+          GitHub 프로젝트와 CV를 함께 분석하고, 채용공고에 맞는 프로젝트 추천과 이력서 초안을 만들어 드려요.
         </p>
 
         <Card style={{ marginBottom: 20 }}>
@@ -153,14 +173,14 @@ export function InputUploadPage() {
           </div>
           <p className="input-card-desc">
             {hasExistingProjects
-              ? "이미 수집된 프로젝트가 있어요. 기존에 수정한 내용은 그대로 유지돼요."
+              ? "이미 수집된 프로젝트가 있어요. 필요하면 새로 추가된 레포만 다시 수집할 수 있습니다."
               : "로그인한 GitHub 계정의 repository와 README를 수집해 프로젝트 후보를 만들어요."}
           </p>
 
           <div className="input-github-row">
             <span className="input-github-row__badge">GitHub</span>
-            <span className="input-github-row__id">github.com/{user?.githubId ?? "yxxnxyxxn"}</span>
-            <span className="input-github-row__status">로그인됨 ✓</span>
+            <span className="input-github-row__id">github.com/{user?.githubId ?? "-"}</span>
+            <span className="input-github-row__status">로그인됨</span>
           </div>
 
           <div
@@ -180,17 +200,43 @@ export function InputUploadPage() {
               </p>
               <p className="input-consent-row__desc">
                 {hasExistingProjects
-                  ? "체크하면 새로 추가된 레포만 찾아서 수집해요. 이미 수집한 프로젝트는 다시 건드리지 않아요."
-                  : "수집한 내용은 프로젝트 후보 생성과 이력서 추천에만 사용돼요."}
+                  ? "체크하면 새로 추가된 레포만 찾아서 수집해요. 이미 수집된 프로젝트는 그대로 유지됩니다."
+                  : "수집된 내용은 프로젝트 후보 생성과 이력서 추천에만 사용됩니다."}
               </p>
             </div>
           </div>
         </Card>
 
+        <Card style={{ marginBottom: 20 }}>
+          <div className="input-card-head">
+            <span className="input-card-title">CV 업로드</span>
+            <span className="input-step-badge">STEP 2</span>
+          </div>
+          <p className="input-card-desc">
+            PDF CV가 있다면 올려 주세요. 경력과 프로젝트 경험이 추천 후보에 함께 반영됩니다.
+          </p>
+          <label className="input-image-upload">
+            <input
+              type="file"
+              accept="application/pdf"
+              className="input-image-upload__input"
+              onChange={(e) => handleCvChange(e.target.files)}
+              disabled={cvUploading}
+            />
+            <span className="input-image-upload__title">
+              {cvUploading ? "CV 업로드 중..." : cvFileName ? `${cvFileName} 업로드 완료` : "CV PDF 선택"}
+            </span>
+            <span className="input-image-upload__desc">
+              선택 사항입니다. 업로드한 CV는 마이페이지의 CV 관리에서 섹션별로 수정할 수 있어요.
+            </span>
+          </label>
+          {cvMessage && <p className="input-cv-message">{cvMessage}</p>}
+        </Card>
+
         <Card>
           <div className="input-card-head">
             <span className="input-card-title">채용공고 등록</span>
-            <span className="input-step-badge">STEP 2</span>
+            <span className="input-step-badge">STEP 3</span>
           </div>
           <p className="input-card-desc">URL, 이미지, 직접 입력 중 편한 방식으로 공고 내용을 등록해 주세요.</p>
 
@@ -200,14 +246,14 @@ export function InputUploadPage() {
             <div className="input-field-stack">
               <input
                 type="url"
-                placeholder="채용공고 URL을 붙여넣어 주세요 (예: https://careers.company.com/job/1234)"
+                placeholder="채용공고 URL을 붙여넣어 주세요. 예: https://careers.company.com/job/1234"
                 className="input-text-field"
                 value={jobState.url}
                 onChange={(e) => setUrl(e.target.value)}
               />
               <div className="input-hint">
                 <span className="input-hint__dot" />
-                회사명 · 직무 · 필수/우대 기술 · 요구 역량을 자동으로 추출해요
+                회사명, 직무, 필수/우대 기술, 요구 역량을 자동으로 추출해요.
               </div>
             </div>
           )}
@@ -224,11 +270,11 @@ export function InputUploadPage() {
                 />
                 <span className="input-image-upload__title">
                   {jobState.imageNames.length > 0
-                    ? `채용공고 이미지 ${jobState.imageNames.length}장 선택됨`
+                    ? `채용공고 이미지 ${jobState.imageNames.length}개 선택됨`
                     : "채용공고 이미지 선택"}
                 </span>
                 <span className="input-image-upload__desc">
-                  PNG, JPG 등 이미지 속 텍스트를 읽어 공고 정보로 저장해요. 최대 6장까지 선택할 수 있어요.
+                  PNG, JPG 이미지를 올리면 텍스트를 읽어 공고 정보로 저장합니다. 최대 6개까지 선택할 수 있어요.
                 </span>
               </label>
               {jobState.imageDataUrls.length > 0 && (
@@ -247,7 +293,7 @@ export function InputUploadPage() {
               )}
               <div className="input-hint">
                 <span className="input-hint__dot" />
-                글자가 선명하고 잘리지 않은 이미지일수록 더 정확해요
+                글자가 선명하고 흐리지 않은 이미지일수록 더 정확해요.
               </div>
             </div>
           )}
@@ -255,7 +301,7 @@ export function InputUploadPage() {
           {jobState.mode === "text" && (
             <textarea
               rows={6}
-              placeholder="공고 내용을 그대로 붙여넣어 주세요. 회사명, 직무, 담당 업무, 자격 요건, 우대 사항이 포함되면 더 정확해요."
+              placeholder="공고 내용을 그대로 붙여넣어 주세요. 회사명, 직무, 담당 업무, 자격 요건, 우대 사항을 포함하면 더 정확해요."
               className="input-textarea"
               value={jobState.rawText}
               onChange={(e) => setRawText(e.target.value)}
@@ -279,8 +325,8 @@ export function InputUploadPage() {
               ? "수집하는 중..."
               : "등록하는 중..."
             : willCollect
-              ? "프로젝트 수집하고 확인하기 →"
-              : "채용공고 등록하고 확인하기 →"}
+              ? "프로젝트 수집하고 확인하기"
+              : "채용공고 등록하고 확인하기"}
         </Button>
       </div>
     </>

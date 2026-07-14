@@ -1,3 +1,6 @@
+import logging
+import math
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -7,6 +10,7 @@ from app.db.database import get_db
 from app.dependencies.auth_helper import get_current_user
 from app.models.analysis import AnalysisResult, RecommendationEvidence, RecommendedProject
 from app.models.async_job import AsyncJob
+from app.models.cv import CvDocument, CvSection
 from app.models.evidence import Evidence
 from app.models.job_posting import JobPosting
 from app.models.portfolio import ProjectSourceLink, SourceDocument
@@ -17,7 +21,10 @@ from app.services.llm_pipeline import (
     generate_recommendation_reason_via_llm,
     validate_project_recommendations,
 )
-from app.services.recommendation_service import recommend_projects_hybrid
+from app.services.embedding_service import EmbeddingError, create_embedding_async
+from app.services.recommendation_service import _has_skill_match, recommend_projects_hybrid
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["analysis"])
 
@@ -69,6 +76,135 @@ def _json_strings(value) -> list[str]:
     return list(dict.fromkeys(strings))
 
 
+def _cosine_similarity(left, right) -> float | None:
+    if left is None or right is None:
+        return None
+    left_values = list(left)
+    right_values = list(right)
+    if len(left_values) == 0 or len(right_values) == 0 or len(left_values) != len(right_values):
+        return None
+    dot = sum(a * b for a, b in zip(left_values, right_values))
+    left_norm = math.sqrt(sum(a * a for a in left_values))
+    right_norm = math.sqrt(sum(b * b for b in right_values))
+    if left_norm == 0 or right_norm == 0:
+        return None
+    return max(0.0, min(1.0, dot / (left_norm * right_norm)))
+
+
+def _cv_section_evidence(
+    sections: list[CvSection],
+    target_skills: list[str],
+) -> list[dict]:
+    evidence_items: list[dict] = []
+    for section in sections:
+        content = section.content.strip()
+        if not content:
+            continue
+        matched = [
+            skill
+            for skill in target_skills
+            if _has_skill_match(skill, [content])
+        ]
+        if not matched:
+            continue
+        evidence_items.append(
+            {
+                "sectionType": section.section_type,
+                "title": section.title,
+                "matchedSkills": matched,
+                "content": content[:700],
+            }
+        )
+    return evidence_items
+
+
+async def _calculate_cv_fit(
+    db: Session,
+    user_id: int,
+    job_posting: JobPosting,
+) -> tuple[int | None, dict]:
+    cv_documents = db.scalars(
+        select(CvDocument)
+        .where(CvDocument.user_id == user_id)
+        .order_by(CvDocument.created_at.desc())
+    ).all()
+    if not cv_documents:
+        return None, {}
+
+    cv_ids = [document.id for document in cv_documents]
+    sections = db.scalars(
+        select(CvSection)
+        .where(CvSection.cv_document_id.in_(cv_ids))
+        .order_by(CvSection.sort_order.asc())
+    ).all()
+    cv_text = "\n\n".join(
+        f"{section.title}\n{section.content.strip()}"
+        for section in sections
+        if section.content.strip()
+    ).strip()
+    if not cv_text:
+        return None, {}
+
+    required_skills = _json_strings(job_posting.required_skills)
+    preferred_skills = _json_strings(job_posting.preferred_skills)
+    target_skills = list(dict.fromkeys(required_skills + preferred_skills))
+    cv_skill_pool = _json_strings(
+        [
+            skill
+            for section in sections
+            for skill in _json_strings(
+                [
+                    token.strip()
+                    for token in section.content.replace("\n", " ").replace("/", ",").split(",")
+                ]
+            )
+        ]
+    )
+    cv_skill_pool.extend(
+        skill
+        for skill in target_skills
+        if skill.casefold() in cv_text.casefold()
+    )
+    cv_skill_pool = list(dict.fromkeys(cv_skill_pool))
+
+    matched_skills = [
+        skill for skill in target_skills if _has_skill_match(skill, cv_skill_pool)
+    ]
+    missing_skills = [
+        skill for skill in required_skills if not _has_skill_match(skill, cv_skill_pool)
+    ]
+    rule_score = len(matched_skills) / len(target_skills) if target_skills else 0.0
+
+    vector_score = None
+    if job_posting.content_embedding is not None:
+        try:
+            cv_embedding = await create_embedding_async(cv_text[:8000])
+            vector_score = _cosine_similarity(cv_embedding, job_posting.content_embedding)
+        except (EmbeddingError, Exception) as exc:
+            logger.warning("CV fit embedding failed: %s", exc)
+
+    if vector_score is None:
+        final_score = rule_score
+    else:
+        final_score = (0.5 * rule_score) + (0.5 * vector_score)
+
+    rounded_score = round(max(0.0, min(1.0, final_score)) * 100)
+    details = {
+        "summary": (
+            "CV 전체에서 공고 요구사항과 직접 맞닿는 경험을 확인했습니다."
+            if matched_skills
+            else "CV에서 공고 요구 기술과 직접 연결되는 근거가 아직 부족합니다."
+        ),
+        "matchedSkills": matched_skills,
+        "missingSkills": missing_skills,
+        "sectionEvidence": _cv_section_evidence(sections, target_skills),
+        "ruleScore": round(rule_score * 100),
+        "vectorScore": round(vector_score * 100) if vector_score is not None else None,
+        "cvDocumentIds": cv_ids,
+    }
+    return rounded_score, details
+
+
 def _project_summary_evidence(project: Project) -> str:
     parts: list[str] = []
     if project.description:
@@ -101,6 +237,21 @@ def _source_documents_by_project(
     for project_id, source_document in rows:
         source_documents_by_project.setdefault(project_id, []).append(source_document)
     return source_documents_by_project
+
+
+def _cv_fit_response(analysis_result: AnalysisResult) -> dict | None:
+    if analysis_result.cv_fit_score is None:
+        return None
+    details = analysis_result.cv_fit_details or {}
+    return {
+        "score": analysis_result.cv_fit_score,
+        "summary": details.get("summary"),
+        "matchedSkills": details.get("matchedSkills", []),
+        "missingSkills": details.get("missingSkills", []),
+        "sectionEvidence": details.get("sectionEvidence", []),
+        "ruleScore": details.get("ruleScore"),
+        "vectorScore": details.get("vectorScore"),
+    }
 
 
 def _source_document_for_requirement(
@@ -471,6 +622,10 @@ async def create_analysis_job(
     )
     projects_by_id = {project.id: project for project in projects}
 
+    cv_fit_score, cv_fit_details = await _calculate_cv_fit(db, current_user.id, job_posting)
+    analysis_result.cv_fit_score = cv_fit_score
+    analysis_result.cv_fit_details = cv_fit_details
+
     build_project_recommendation_payload(
         job_posting,
         projects,
@@ -642,6 +797,7 @@ def get_analysis_job(
     response.update(
         {
             "jobPosting": _job_posting_response(job_posting),
+            "cvFit": _cv_fit_response(analysis_result),
             "recommendedProjects": recommended_project_responses,
         }
     )

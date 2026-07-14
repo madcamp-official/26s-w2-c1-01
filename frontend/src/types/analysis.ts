@@ -16,7 +16,6 @@ export interface MatchEvidence {
   explanation: string;
 }
 
-// 추천 프로젝트 — api-spec #11 recommendedProjects
 export interface RecommendedProject {
   projectId: number;
   title: string;
@@ -28,8 +27,25 @@ export interface RecommendedProject {
   evidenceIds: number[];
 }
 
-// GET /analysis-jobs/{jobId} 완료 응답
+export interface CvFitSectionEvidence {
+  sectionType: string;
+  title: string;
+  matchedSkills: string[];
+  content: string;
+}
+
+export interface CvFit {
+  score: number;
+  summary?: string;
+  matchedSkills: string[];
+  missingSkills: string[];
+  sectionEvidence: CvFitSectionEvidence[];
+  ruleScore?: number | null;
+  vectorScore?: number | null;
+}
+
 export interface AnalysisJobResult extends JobResponse {
   jobPosting?: ParsedJobPosting;
+  cvFit?: CvFit | null;
   recommendedProjects?: RecommendedProject[];
 }

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Badge, sourceTone } from "./Badge";
 import { Chip } from "./Chip";
 import type { EditableProject } from "../types/project";
@@ -7,9 +8,11 @@ const sourceLabel: Record<EditableProject["sourceType"], string> = {
   github: "GitHub",
   notion: "Notion",
   pdf: "PDF",
+  cv: "CV",
 };
 
 function repoPath(sourceUrl: string) {
+  if (sourceUrl.startsWith("cv:")) return "업로드한 CV";
   try {
     return new URL(sourceUrl).pathname.replace(/^\//, "");
   } catch {
@@ -23,7 +26,7 @@ interface ProjectCardProps {
   onRoleChange: (role: string) => void;
   onDescriptionChange: (description: string) => void;
   onAchievementsChange: (achievements: string[]) => void;
-  onAddSkill: () => void;
+  onAddSkill: (skill: string) => void;
   onToggleExclude: () => void;
 }
 
@@ -37,6 +40,15 @@ export function ProjectCard({
   onToggleExclude,
 }: ProjectCardProps) {
   const label = sourceLabel[project.sourceType];
+  const [addingSkill, setAddingSkill] = useState(false);
+  const [skillInput, setSkillInput] = useState("");
+
+  const commitSkill = () => {
+    const skill = skillInput.trim();
+    if (skill) onAddSkill(skill);
+    setAddingSkill(false);
+    setSkillInput("");
+  };
 
   return (
     <div className="project-card" style={{ opacity: project.excluded ? 0.45 : 1 }}>
@@ -71,12 +83,34 @@ export function ProjectCard({
 
         <span className="project-card__label">기술 스택</span>
         <div className="project-card__stack">
-          {project.skills.map((s) => (
-            <Chip key={s}>{s}</Chip>
+          {project.skills.map((skill) => (
+            <Chip key={skill}>{skill}</Chip>
           ))}
-          <span className="chip chip--dashed" onClick={onAddSkill}>
-            + 추가
-          </span>
+          {addingSkill ? (
+            <span className="project-card__skill-add">
+              <input
+                className="project-card__skill-input"
+                value={skillInput}
+                autoFocus
+                placeholder="기술 스택"
+                onChange={(e) => setSkillInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitSkill();
+                  if (e.key === "Escape") {
+                    setAddingSkill(false);
+                    setSkillInput("");
+                  }
+                }}
+              />
+              <button className="project-card__skill-save" type="button" onClick={commitSkill}>
+                추가
+              </button>
+            </span>
+          ) : (
+            <button className="chip chip--dashed project-card__add-chip" type="button" onClick={() => setAddingSkill(true)}>
+              + 추가
+            </button>
+          )}
         </div>
 
         <span className="project-card__label">설명</span>
@@ -94,7 +128,10 @@ export function ProjectCard({
           value={project.achievements.join(", ")}
           onChange={(e) =>
             onAchievementsChange(
-              e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
+              e.target.value
+                .split(",")
+                .map((s) => s.trim())
+                .filter(Boolean),
             )
           }
         />

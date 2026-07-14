@@ -60,10 +60,24 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       prev.map((p) => (p.projectId === projectId ? { ...p, excluded: !p.excluded } : p)),
     );
 
-  const addSkill = (projectId: number, skill: string) =>
-    setProjects((prev) =>
-      prev.map((p) => (p.projectId === projectId ? { ...p, skills: [...p.skills, skill] } : p)),
-    );
+  const addSkill = (projectId: number, skill: string) => {
+    const trimmedSkill = skill.trim();
+    if (!trimmedSkill) return;
+
+    setProjects((prev) => {
+      const project = prev.find((p) => p.projectId === projectId);
+      if (!project) return prev;
+
+      const alreadyExists = project.skills.some(
+        (existingSkill) => existingSkill.trim().toLowerCase() === trimmedSkill.toLowerCase(),
+      );
+      if (alreadyExists) return prev;
+
+      const skills = [...project.skills, trimmedSkill];
+      apiUpdateProject(projectId, { skills }).catch(() => refreshProjects());
+      return prev.map((p) => (p.projectId === projectId ? { ...p, skills } : p));
+    });
+  };
 
   const addRepository = async (fullName: string) => {
     // api-spec.md #9 POST /github/repositories
