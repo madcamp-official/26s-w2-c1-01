@@ -21,6 +21,9 @@ export function RecommendationResultPage() {
     [analysis],
   );
 
+  const topScore = sortedProjects[0]?.score ?? 0;
+  const isGoodMatch = topScore >= 70;
+
   const skillCoverage = useMemo(() => {
     if (!analysis) return null;
     const matched = new Set(analysis.recommendedProjects.flatMap((p) => p.matchedSkills));
@@ -77,7 +80,9 @@ export function RecommendationResultPage() {
             <h1 className="result-header__title">
               이 공고, {user?.name ?? "회원"}님과
               <br />
-              <span className="result-header__title-accent">잘 맞는 편이에요</span>
+              <span className="result-header__title-accent">
+                {isGoodMatch ? "잘 맞는 편이에요" : "보완이 필요해요"}
+              </span>
             </h1>
           </div>
           <div className="result-header__actions">
