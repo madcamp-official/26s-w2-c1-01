@@ -80,6 +80,8 @@
 
 ## 아키텍처
 
+![시스템 아키텍처 다이어그램](docs/architecture_diagram.png)
+
 ```
 [React SPA (frontend)]
    ├─ GitHub OAuth 로그인 → [FastAPI backend] /auth/github/*
