@@ -14,6 +14,7 @@ interface ProjectsContextValue {
   updateProject: (projectId: number, patch: UpdateProjectPayload) => void;
   toggleExcluded: (projectId: number) => void;
   addSkill: (projectId: number, skill: string) => void;
+  removeSkill: (projectId: number, skill: string) => void;
   addRepository: (fullName: string) => Promise<void>;
 }
 
@@ -79,6 +80,17 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const removeSkill = (projectId: number, skill: string) => {
+    setProjects((prev) => {
+      const project = prev.find((p) => p.projectId === projectId);
+      if (!project) return prev;
+
+      const skills = project.skills.filter((existingSkill) => existingSkill !== skill);
+      apiUpdateProject(projectId, { skills }).catch(() => refreshProjects());
+      return prev.map((p) => (p.projectId === projectId ? { ...p, skills } : p));
+    });
+  };
+
   const addRepository = async (fullName: string) => {
     // api-spec.md #9 POST /github/repositories
     const project = await addGithubRepository(fullName);
@@ -104,6 +116,7 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
         updateProject,
         toggleExcluded,
         addSkill,
+        removeSkill,
         addRepository,
       }}
     >

@@ -24,6 +24,7 @@ export function ProjectEditPage() {
     updateProject,
     toggleExcluded,
     addSkill,
+    removeSkill,
     addRepository,
   } = useProjects();
   const canStartAnalysis = activeCount > 0 && typeof jobPostingId === "number";
@@ -111,6 +112,7 @@ export function ProjectEditPage() {
                 onDescriptionChange={(description) => updateProject(project.projectId, { description })}
                 onAchievementsChange={(achievements) => updateProject(project.projectId, { achievements })}
                 onAddSkill={(skill) => addSkill(project.projectId, skill)}
+                onRemoveSkill={(skill) => removeSkill(project.projectId, skill)}
                 onToggleExclude={() => toggleExcluded(project.projectId)}
               />
             ))}

@@ -27,6 +27,7 @@ interface ProjectCardProps {
   onDescriptionChange: (description: string) => void;
   onAchievementsChange: (achievements: string[]) => void;
   onAddSkill: (skill: string) => void;
+  onRemoveSkill: (skill: string) => void;
   onToggleExclude: () => void;
 }
 
@@ -37,6 +38,7 @@ export function ProjectCard({
   onDescriptionChange,
   onAchievementsChange,
   onAddSkill,
+  onRemoveSkill,
   onToggleExclude,
 }: ProjectCardProps) {
   const label = sourceLabel[project.sourceType];
@@ -84,7 +86,9 @@ export function ProjectCard({
         <span className="project-card__label">기술 스택</span>
         <div className="project-card__stack">
           {project.skills.map((skill) => (
-            <Chip key={skill}>{skill}</Chip>
+            <Chip key={skill} onRemove={() => onRemoveSkill(skill)}>
+              {skill}
+            </Chip>
           ))}
           {addingSkill ? (
             <span className="project-card__skill-add">

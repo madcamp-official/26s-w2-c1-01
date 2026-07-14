@@ -11,13 +11,14 @@ export function Chip({ children, onRemove, dashed }: ChipProps) {
   if (dashed) {
     return <span className="chip chip--dashed">{children}</span>;
   }
+
   return (
-    <span className="chip">
+    <span className={`chip${onRemove ? " chip--removable" : ""}`}>
       {children}
       {onRemove && (
-        <span className="chip__remove" onClick={onRemove}>
-          ✕
-        </span>
+        <button className="chip__remove" type="button" onClick={onRemove} aria-label="기술 스택 삭제">
+          x
+        </button>
       )}
     </span>
   );

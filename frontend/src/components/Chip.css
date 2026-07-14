@@ -1,4 +1,5 @@
 .chip {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -11,11 +12,28 @@
 }
 
 .chip__remove {
-  opacity: 0.5;
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  width: 17px;
+  height: 17px;
+  border: none;
+  border-radius: 50%;
+  padding: 0;
+  background: var(--ink);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 17px;
+  opacity: 0;
   cursor: pointer;
+  transition: opacity 120ms ease, transform 120ms ease;
+  transform: scale(0.9);
 }
-.chip__remove:hover {
+.chip--removable:hover .chip__remove,
+.chip__remove:focus-visible {
   opacity: 1;
+  transform: scale(1);
 }
 
 .chip--dashed {
