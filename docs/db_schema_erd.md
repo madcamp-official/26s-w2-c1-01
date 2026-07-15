@@ -1,19 +1,19 @@
-# DB 스키마 및 ERD 초안
+# DB Schema and ERD
 
-> 기준 문서: `docs/functional_spec.md`, `docs/api_spec.md`
->
-> 목적: mock API가 아니라 최종 기능 흐름에 필요한 데이터를 기준으로 MVP DB 구조를 먼저 합의하기 위한 초안입니다.
+> 기준 코드: `backend/app/models/*.py`, `backend/alembic/versions/*.py`  
+> 갱신일: 2026-07-15
 
-## 설계 방향
+이 문서는 현재 백엔드가 실제로 사용하는 PostgreSQL 스키마를 기준으로 정리한다. 초기 설계안이 아니라 SQLAlchemy 모델과 Alembic 마이그레이션에 반영된 최신 구조가 기준이다.
 
-- 모든 데이터는 `users`를 기준으로 소유권을 가진다.
-- GitHub, Notion, Blog, PDF, LinkedIn 등 포트폴리오 출처는 `portfolio_sources`로 일반화한다.
-- 출처에서 추출한 README, Notion page, blog post, PDF text 등 원문 단위는 `source_documents`에 저장한다.
-- 프로젝트는 사용자가 최종 편집할 수 있는 정제된 단위이므로 `projects`에 저장한다.
-- 하나의 프로젝트가 여러 출처에서 발견될 수 있으므로 `projects`와 `source_documents`는 N:M 관계로 둔다.
-- AI가 생성하거나 추천한 모든 결과는 `evidences`를 통해 원문 근거와 연결한다.
-- GitHub 수집, 공고 분석, 이력서 생성처럼 시간이 걸리는 작업은 `async_jobs`에서 공통 관리한다.
-- 배열이면서 초기 변경 가능성이 큰 값은 PostgreSQL `JSONB`로 저장한다. 예: `skills`, `achievements`, `required_skills`, `warnings`.
+## 설계 요약
+
+- 모든 사용자 소유 데이터는 `users.id`를 기준으로 묶인다.
+- GitHub OAuth 계정은 `oauth_accounts`에 저장하며, GitHub access token은 암호화된 문자열로 보관한다.
+- GitHub 저장소 수집 결과는 `portfolio_sources`, `source_documents`, `projects`, `project_source_links`, `evidences`에 나뉘어 저장된다.
+- 사용자가 업로드한 CV PDF는 `cv_documents`, `cv_sections`에 저장된다. CV의 프로젝트성 섹션은 `projects.source_type = 'cv'` 프로젝트와 `evidences.source_type = 'cv'` 근거로 동기화된다.
+- 채용공고는 `job_postings`에 저장되고, 공고 요약/프로젝트 요약/CV 본문에는 pgvector `vector(1536)` 임베딩 캐시를 둘 수 있다.
+- 분석, 추천, 이력서 초안 생성처럼 시간이 걸리는 작업은 `async_jobs`에서 상태를 관리한다.
+- 추천 근거와 이력서 섹션 근거는 각각 `recommendation_evidences`, `resume_section_evidences` 조인 테이블로 연결한다.
 
 ## ERD
 
@@ -21,35 +21,38 @@
 erDiagram
     users ||--o{ oauth_accounts : has
     users ||--o{ async_jobs : owns
-    users ||--o{ portfolio_sources : registers
+    users ||--o{ portfolio_sources : owns
     users ||--o{ projects : owns
-    users ||--o{ job_postings : registers
+    users ||--o{ job_postings : owns
     users ||--o{ analysis_results : owns
     users ||--o{ resume_results : owns
+    users ||--o{ cv_documents : uploads
 
     portfolio_sources ||--o{ source_documents : contains
-    source_documents ||--o{ project_source_links : supports
-    projects ||--o{ project_source_links : linked_from
+    source_documents ||--o{ project_source_links : links
+    projects ||--o{ project_source_links : linked
 
     source_documents ||--o{ evidences : provides
     projects ||--o{ evidences : has
     job_postings ||--o{ evidences : has
 
+    cv_documents ||--o{ cv_sections : contains
+
     job_postings ||--o{ job_posting_attachments : has
-    job_postings ||--o{ analysis_results : analyzed_as
+    job_postings ||--o{ analysis_results : analyzed
     analysis_results ||--o{ recommended_projects : recommends
-    projects ||--o{ recommended_projects : recommended
-    recommended_projects ||--o{ recommendation_evidences : justified_by
-    evidences ||--o{ recommendation_evidences : used_by
+    projects ||--o{ recommended_projects : selected
+    recommended_projects ||--o{ recommendation_evidences : justified
+    evidences ||--o{ recommendation_evidences : used
 
     job_postings ||--o{ resume_results : generates
-    analysis_results ||--o{ resume_results : basis_for
+    analysis_results ||--o{ resume_results : basis
     resume_results ||--o{ resume_result_projects : uses
     projects ||--o{ resume_result_projects : selected
     resume_results ||--o{ resume_sections : contains
-    projects ||--o{ resume_sections : referenced_by
-    resume_sections ||--o{ resume_section_evidences : justified_by
-    evidences ||--o{ resume_section_evidences : used_by
+    projects ||--o{ resume_sections : referenced
+    resume_sections ||--o{ resume_section_evidences : justified
+    evidences ||--o{ resume_section_evidences : used
     resume_results ||--o{ project_suggestions : suggests
 
     users {
@@ -120,6 +123,8 @@ erDiagram
         text role
         jsonb skills
         jsonb achievements
+        text summary_text
+        vector_1536 summary_embedding
         text source_type
         text source_url
         boolean is_archived
@@ -131,7 +136,7 @@ erDiagram
         bigint id PK
         bigint project_id FK
         bigint source_document_id FK
-        numeric merge_confidence
+        numeric_5_4 merge_confidence
         boolean is_primary
         timestamptz created_at
     }
@@ -149,6 +154,30 @@ erDiagram
         timestamptz created_at
     }
 
+    cv_documents {
+        bigint id PK
+        bigint user_id FK
+        text file_name
+        text file_path
+        text raw_text
+        text embedding_text_hash
+        vector_1536 content_embedding
+        text status
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    cv_sections {
+        bigint id PK
+        bigint cv_document_id FK
+        text section_type
+        text title
+        text content
+        integer sort_order
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
     job_postings {
         bigint id PK
         bigint user_id FK
@@ -160,6 +189,8 @@ erDiagram
         jsonb required_skills
         jsonb preferred_skills
         jsonb competencies
+        text content_summary
+        vector_1536 content_embedding
         text status
         timestamptz created_at
         timestamptz updated_at
@@ -184,6 +215,8 @@ erDiagram
         jsonb missing_skills
         jsonb missing_experiences
         jsonb missing_competencies
+        integer cv_fit_score
+        jsonb cv_fit_details
         timestamptz created_at
     }
 
@@ -255,104 +288,89 @@ erDiagram
     }
 ```
 
-## 테이블별 역할
+## 테이블 역할
 
 | 테이블 | 역할 |
 |---|---|
 | `users` | 서비스 사용자 기본 정보 |
-| `oauth_accounts` | GitHub, Google 등 OAuth 계정 연결 정보 |
-| `async_jobs` | GitHub 수집, 공고 분석, 이력서 생성 작업 상태 공통 관리 |
-| `portfolio_sources` | GitHub, Notion, Blog, PDF 등 사용자가 등록한 포트폴리오 출처 |
-| `source_documents` | 출처에서 추출된 README, 페이지, 글, PDF 텍스트 등 원문 문서 |
-| `projects` | AI가 추출하고 사용자가 편집한 최종 프로젝트 단위 |
-| `project_source_links` | 하나의 프로젝트가 여러 원문 문서와 연결되는 관계 |
-| `evidences` | 추천, 분석, 이력서 문장에 사용되는 원문 근거 |
-| `job_postings` | 등록된 채용공고 원문 및 구조화 결과 |
-| `job_posting_attachments` | 채용공고 이미지/PDF 첨부와 OCR/추출 결과 |
-| `analysis_results` | 채용공고와 프로젝트 비교 분석 결과 |
-| `recommended_projects` | 분석 결과에서 추천된 프로젝트와 점수/이유 |
+| `oauth_accounts` | GitHub OAuth 연결 정보와 암호화된 access token |
+| `async_jobs` | GitHub 수집, 공고 분석, 이력서 생성 작업 상태 |
+| `portfolio_sources` | GitHub 전체 수집 또는 수동 저장소 추가 같은 포트폴리오 원천 |
+| `source_documents` | README 등 원천 문서 본문 |
+| `projects` | 추천과 이력서 생성에 사용하는 프로젝트 단위. GitHub와 CV 기반 프로젝트를 모두 포함 |
+| `project_source_links` | 프로젝트와 원천 문서의 N:M 연결 |
+| `evidences` | 추천/이력서 문장을 뒷받침하는 원문 근거 |
+| `cv_documents` | 업로드된 CV PDF 메타데이터, 원문, 임베딩 캐시 |
+| `cv_sections` | CV를 기본정보/학력/경험/프로젝트/기술 등 섹션으로 나눈 결과 |
+| `job_postings` | 채용공고 원문, 구조화된 요구사항, 요약/임베딩 |
+| `job_posting_attachments` | 공고 첨부 파일 추출 결과. 현재 라우터에서는 직접 사용하지 않음 |
+| `analysis_results` | 공고와 프로젝트/CV의 적합도 분석 결과 |
+| `recommended_projects` | 분석 결과별 추천 프로젝트와 점수/사유 |
 | `recommendation_evidences` | 추천 프로젝트와 근거의 N:M 연결 |
-| `resume_results` | 생성된 이력서 초안 전체 결과 |
-| `resume_result_projects` | 이력서 생성에 사용자가 선택한 프로젝트 목록 |
+| `resume_results` | 생성된 이력서 초안 결과 |
+| `resume_result_projects` | 이력서 생성에 선택된 프로젝트 목록과 순서 |
 | `resume_sections` | 이력서 섹션별 생성 문장 |
-| `resume_section_evidences` | 이력서 문장과 근거의 N:M 연결 |
-| `project_suggestions` | 부족 역량을 보완하기 위한 신규 프로젝트 제안 |
+| `resume_section_evidences` | 이력서 섹션과 근거의 N:M 연결 |
+| `project_suggestions` | 부족 역량 보완용 추천 프로젝트 |
 
-## MVP에서 우선 구현할 테이블
+## 주요 제약과 인덱스
 
-1. `users`
-2. `oauth_accounts`
-3. `async_jobs`
-4. `portfolio_sources`
-5. `source_documents`
-6. `projects`
-7. `project_source_links`
-8. `evidences`
-9. `job_postings`
-10. `analysis_results`
-11. `recommended_projects`
-12. `recommendation_evidences`
-13. `resume_results`
-14. `resume_result_projects`
-15. `resume_sections`
-16. `resume_section_evidences`
-17. `project_suggestions`
-
-`job_posting_attachments`는 이미지/PDF 입력을 바로 구현할 경우 MVP에 포함하고, URL/텍스트 입력만 먼저 구현한다면 2차로 미뤄도 됩니다.
+| 대상 | 내용 |
+|---|---|
+| `oauth_accounts` | `(provider, provider_user_id)` unique |
+| `recommended_projects` | `(analysis_result_id, project_id)` unique |
+| `recommendation_evidences` | `(recommended_project_id, evidence_id)` unique |
+| `resume_result_projects` | `(resume_result_id, project_id)` unique |
+| `resume_section_evidences` | `(resume_section_id, evidence_id)` unique |
+| FK 소유 컬럼 | `user_id`, `project_id`, `job_posting_id`, `analysis_result_id`, `resume_result_id`, `cv_document_id` 등 주요 FK에 index |
+| 상태/분류 컬럼 | `async_jobs.job_type/status`, `portfolio_sources.source_type/status`, `job_postings.status`, `evidences.source_type`, `cv_sections.section_type` 등에 index |
 
 ## 주요 상태값
 
-| 대상 | 값 |
+| 컬럼 | 현재 코드에서 쓰는 값 |
 |---|---|
-| `async_jobs.status` | `pending`, `running`, `completed`, `failed` |
+| `async_jobs.status` | `running`, `completed`, `failed` |
 | `async_jobs.job_type` | `github_collection`, `job_posting_analysis`, `resume_generation` |
-| `portfolio_sources.source_type` | `github`, `notion`, `velog`, `tistory`, `website`, `pdf`, `linkedin`, `google_drive` |
-| `portfolio_sources.status` | `pending`, `collecting`, `completed`, `failed` |
-| `job_postings.input_type` | `url`, `text`, `image`, `pdf` |
-| `job_postings.status` | `pending`, `extracting`, `completed`, `failed` |
+| `portfolio_sources.source_type` | `github`, `github_manual` |
+| `portfolio_sources.status` | `collecting`, `completed` |
+| `projects.source_type` | `github`, `github_manual`, `cv` |
+| `evidences.source_type` | `github`, `cv`, `recommendation_match` |
+| `job_postings.input_type` | `url`, `text`, `image` |
+| `job_postings.status` | `completed` |
+| `cv_documents.status` | `ready`, `empty` |
 
-## JSONB로 둘 필드
+## JSONB/Vector 컬럼
 
-| 필드 | 이유 |
+| 컬럼 | 용도 |
 |---|---|
-| `projects.skills` | 초기에는 배열 저장이 충분하고, 검색 요구가 커지면 `project_skills`로 분리 가능 |
-| `projects.achievements` | 성과 문장이 자유 형식 배열 |
-| `job_postings.required_skills` | LLM 구조화 결과이며 공고마다 형태가 유동적 |
-| `job_postings.preferred_skills` | LLM 구조화 결과이며 공고마다 형태가 유동적 |
-| `job_postings.competencies` | 역량 표현이 자유 형식 배열 |
-| `analysis_results.missing_*` | 분석 결과 구조가 기능 확장에 따라 바뀔 수 있음 |
-| `recommended_projects.matched_skills` | 추천 결과의 부가 정보 |
-| `recommended_projects.missing_skills` | 추천 결과의 부가 정보 |
-| `resume_results.missing_skills` | 최종 이력서 결과의 부가 정보 |
-| `resume_results.warnings` | 안전 규칙 위반 방지를 위한 경고 목록 |
-| `project_suggestions.target_skills` | 추천 프로젝트의 목표 기술 목록 |
-| `*.metadata` | 외부 API 응답, OCR 정보, LLM 추론 메타데이터 등 확장 필드 |
+| `projects.skills`, `projects.achievements` | 프로젝트 기술/성과 목록 |
+| `projects.summary_text`, `projects.summary_embedding` | 프로젝트 검색/추천용 요약과 1536차원 임베딩 |
+| `job_postings.required_skills`, `preferred_skills`, `competencies` | LLM이 구조화한 공고 요구사항 |
+| `job_postings.content_summary`, `content_embedding` | 공고 분석용 요약과 1536차원 임베딩 |
+| `analysis_results.cv_fit_details` | CV 적합도 설명, 매칭/부족 스킬, 섹션 근거, rule/vector 점수 |
+| `recommended_projects.matched_skills`, `missing_skills` | 추천 프로젝트별 매칭/부족 스킬 |
+| `evidences.metadata` | GitHub repo id, CV 문서/섹션 id, 추천 매칭 설명 등 확장 메타데이터 |
+| `cv_documents.embedding_text_hash`, `content_embedding` | CV 섹션 본문의 임베딩 캐시 무효화/재사용 |
 
-## API 응답과 테이블 매핑
+## API와 테이블 매핑
 
-| API | 주 테이블 |
+| API | 주요 테이블 |
 |---|---|
 | `GET /auth/github/callback` | `users`, `oauth_accounts` |
-| `GET /me` | `users` |
-| `POST /github/collection-jobs` | `async_jobs`, `portfolio_sources` |
-| `GET /github/collection-jobs/{jobId}` | `async_jobs`, `projects`, `source_documents`, `evidences` |
+| `GET /me` | `users`, `oauth_accounts` |
+| `POST /github/collection-jobs` | `async_jobs`, `portfolio_sources`, `source_documents`, `projects`, `project_source_links`, `evidences` |
+| `GET /github/collection-jobs/{jobId}` | `async_jobs`, `projects` |
+| `POST /github/repositories` | `portfolio_sources`, `source_documents`, `projects`, `project_source_links`, `evidences` |
 | `GET /projects` | `projects`, `evidences` |
 | `PATCH /projects/{projectId}` | `projects` |
-| `POST /job-postings` | `job_postings`, `job_posting_attachments` |
+| `POST /job-postings` | `job_postings` |
 | `POST /job-postings/{jobPostingId}/analysis-jobs` | `async_jobs` |
-| `GET /analysis-jobs/{jobId}` | `async_jobs`, `analysis_results`, `recommended_projects`, `recommendation_evidences`, `evidences` |
-| `POST /resume-jobs` | `async_jobs`, `resume_result_projects` |
-| `GET /resume-jobs/{jobId}` | `async_jobs`, `resume_results` |
+| `GET /analysis-jobs/{jobId}` | `async_jobs`, `analysis_results`, `recommended_projects`, `recommendation_evidences`, `evidences`, `job_postings`, `projects` |
+| `GET /cvs` | `cv_documents`, `cv_sections` |
+| `POST /cvs/upload` | `cv_documents`, `cv_sections`, `projects`, `evidences` |
+| `PATCH /cvs/sections/{sectionId}` | `cv_sections`, `cv_documents`, `projects`, `evidences` |
+| `DELETE /cvs/{cvId}` | `cv_documents`, `cv_sections`, `projects`, `evidences` |
+| `POST /resume-jobs` | `async_jobs`, `resume_results`, `resume_result_projects`, `resume_sections`, `resume_section_evidences`, `project_suggestions` |
+| `GET /resume-jobs/{jobId}` | `async_jobs` |
 | `GET /resume-results/{resumeResultId}` | `resume_results`, `resume_sections`, `resume_section_evidences`, `project_suggestions` |
-| `GET /evidences/{evidenceId}` | `evidences` |
-
-## 추후 분리 후보
-
-아래 테이블은 MVP에서는 JSONB로 시작해도 되지만, 검색/통계/필터링이 중요해지면 별도 테이블로 분리하는 것이 좋습니다.
-
-- `skills`
-- `project_skills`
-- `job_posting_required_skills`
-- `job_posting_preferred_skills`
-- `competencies`
-- `project_achievements`
+| `GET /evidences/{evidenceId}` | `evidences`, `projects`, `job_postings` |
