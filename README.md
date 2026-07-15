@@ -47,7 +47,7 @@
   - GitHub, Notion, 블로그, 개인 홈페이지, PDF 이력서 등에서 사용자 경험을 수집하고 프로젝트 단위로 분리·편집
   - 채용공고와 프로젝트를 의미적으로 매칭하여 추천 순위, 강조할 경험, 지원서 문장 초안, 추천 근거를 제공
   - 부족한 역량을 탐지하고 기간·난이도·산출물이 포함된 보완 프로젝트를 추천
-- **사용 / 시연 시나리오:** 용자가 지원 직군을 선택하고 채용공고 URL 또는 이미지를 등록한다. 이후 GitHub URL, 포트폴리오 URL, PDF 이력서 등을 등록하면 시스템이 자료를 수집하여 프로젝트 후보를 생성한다. 사용자는 프로젝트 단위로 내용을 확인·수정한 뒤 분석을 실행한다. 서비스는 채용공고 요구 역량, 추천 프로젝트 순위, 이력서에 포함할 핵심 내용과 문장 초안, 각 추천의 출처 근거, 부족 역량 및 보완 프로젝트를 결과 화면에 제공한다.
+- **사용 / 시연 시나리오:** 사용자가 채용공고 URL 또는 이미지를 등록한다. 이후 GitHub URL, 포트폴리오 및 이력서 PDF 등을 등록하면 시스템이 자료를 수집하여 프로젝트 후보를 생성한다. 사용자는 프로젝트 단위로 내용을 확인·수정한 뒤 분석을 실행한다. 서비스는 채용공고 요구 역량, 추천 프로젝트 순위, 이력서에 포함할 핵심 내용과 문장 초안, 각 추천의 출처 근거, 부족 역량 및 보완 프로젝트를 결과 화면에 제공한다.
 - **팀원별 역할:** 김태현은 백엔드 API, 데이터베이스, 외부 URL·파일 파싱, LLM 분석 파이프라인, 공고-프로젝트 매칭을 담당한다. 유나연은 입력·업로드 화면, 프로젝트 편집 화면, 분석 진행 상태, 추천 결과 및 근거 시각화 등 프론트엔드를 담당한다. API 명세와 데이터 스키마는 공동으로 정의하고 통합 테스트를 함께 수행한다.
 
 
@@ -55,13 +55,13 @@
 
 | 날짜 | 목표 |
 |---|---|
-| Day 1 |  |
-| Day 2 |  |
-| Day 3 |  |
-| Day 4 |  |
-| Day 5 |  |
-| Day 6 |  |
-| Day 7 |  |
+| Day 1 (07/09) | 팀 구성, 기획안 작성, 리포지토리 초기화 및 README 작성 |
+| Day 2 (07/10) | 프론트엔드/백엔드 초기 폴더 구조 생성, API 명세 초안 작성, GitHub OAuth 로그인 흐름 및 MSW 기반 목업 API 구축, 대시보드 라우팅 구성 |
+| Day 3 (07/11) | DB 스키마 및 인증 설계, 프론트엔드-백엔드 실제 연동, 백엔드 API 플로우 구현 |
+| Day 4 (07/12) | 화면 설계 보완 및 상세 기능 정의, 매칭·추천 로직 설계 |
+| Day 5 (07/13) | LLM 파이프라인 구현(채용공고 구조화, 텍스트/이미지 입력 지원), 임베딩 기반 하이브리드 추천 스코어링, GitHub 프로젝트 수집 및 편집 화면 구현 |
+| Day 6 (07/14) | 이력서 생성 및 추천 결과 화면, 근거 시각화 모달 구현, UI/UX 다듬기 |
+| Day 7 (07/15) | 통합 테스트, 버그 수정, 시연 자료 준비 및 최종 발표 |
 
 ---
 
@@ -80,7 +80,30 @@
 
 ## 아키텍처
 
-<!-- 실시간 인터랙션: WebSocket/SSE/WebRTC 구조도 / LLM Wrapper: API 연동 흐름도 / Cross-Platform: 플랫폼 구성도 -->
+![시스템 아키텍처 다이어그램](docs/architecture_diagram.png)
+
+```
+[React SPA (frontend)]
+   ├─ GitHub OAuth 로그인 → [FastAPI backend] /auth/github/*
+   ├─ 채용공고 URL/이미지 입력 → /job-postings, /job-postings/{id}/analysis-jobs
+   ├─ GitHub 저장소 수집 → /github/collection-jobs, /github/repositories
+   ├─ 프로젝트 목록/수정 → /projects, /projects/{id}
+   ├─ CV(PDF) 업로드/관리 → /cvs, /cvs/upload
+   └─ 이력서 생성/결과 조회 → /resumes/resume-jobs, /resumes/resume-results/{id}
+                │
+                ▼
+        [FastAPI backend (backend/app)]
+   routers → services (llm_pipeline, embedding_service, recommendation_service, github_client) → models(SQLAlchemy)
+                │
+        ┌───────┴────────┐
+        ▼                ▼
+ [PostgreSQL + pgvector]   [LLM API (OpenRouter/OpenAI)]
+   (Docker Compose)         임베딩 생성, 채용공고/프로젝트 구조화, 이력서 문장 생성
+```
+
+- 프론트엔드는 채용공고·포트폴리오 입력, 진행 상태 폴링, 추천 결과 및 근거 시각화를 담당하는 SPA로 백엔드 REST API를 호출한다.
+- 백엔드는 GitHub OAuth 인증, 외부 자료(GitHub/PDF/채용공고) 수집·구조화, LLM 기반 분석 파이프라인, pgvector를 활용한 임베딩 매칭을 담당한다.
+- 시간이 걸리는 작업(GitHub 수집, 공고 분석, 이력서 생성)은 `pending → running → completed/failed` 상태를 갖는 비동기 Job으로 처리되며, 프론트엔드는 진행 상태 페이지에서 폴링한다.
 
 ---
 
@@ -90,49 +113,82 @@
 
 ### 화면 / 인터페이스 설계
 
-<!-- Figma 링크, 화면 이미지, CLI 사용 예시, 앱 화면 등 -->
+`frontend/src/pages` 기준 화면 구성:
+
+| 화면 | 파일 | 설명 |
+|---|---|---|
+| 로그인 | `LoginPage` | GitHub OAuth 로그인 |
+| 로그인 콜백 | `AuthCallbackPage` | GitHub OAuth 콜백 처리 |
+| 메인 / 대시보드 | `MainPage` | 채용공고·프로젝트 현황 진입점 |
+| 입력/업로드 | `InputUploadPage` | 채용공고 URL·이미지, GitHub/PDF 등 포트폴리오 입력 |
+| 프로젝트 수정 | `ProjectEditPage` | 수집된 프로젝트 단위 편집·병합·제외 |
+| 분석 진행 상태 | `AnalysisProgressPage` | 분석 Job 진행 상태 폴링 화면 |
+| 추천 결과 | `RecommendationResultPage` | 추천 순위·이력서 문장·근거 시각화 |
+| CV 관리 | `CvManagePage` | 업로드한 PDF 이력서 관리 |
+| 마이페이지 | `MyPage` | 사용자 정보 및 분석 기록 |
 
 ### 데이터 구조
 
-<!-- DB 스키마, JSON 구조, 파일 저장 방식 등 -->
+- DB 스키마: [`docs/db_schema_erd.png`](docs/db_schema_erd.png), [`docs/db_schema_erd.md`](docs/db_schema_erd.md)
+- 상세 데이터/API 스키마 문서: [`docs/data-schema.md`](docs/data-schema.md), [`docs/api-spec.md`](docs/api-spec.md)
+- 주요 테이블(`backend/app/models`): `user`, `job_posting`, `portfolio`, `project`, `evidence`, `cv`, `resume`, `analysis`, `async_job`
+- 프로젝트·채용공고는 pgvector 임베딩 컬럼을 가지며, 임베딩 유사도 + 규칙 기반 점수를 혼합한 하이브리드 매칭에 사용된다.
 
 ### API / 외부 서비스 연동
 
-| Method / 방식 | Endpoint / 서비스 | 설명 | 요청 | 응답 | 비고 |
-|---|---|---|---|---|---|
-|  |  |  |  |  |  |
+| Method / 방식 | Endpoint | 설명 | 비고 |
+|---|---|---|---|
+| GET | `/auth/github/login`, `/auth/github/callback`, `/auth/me` | GitHub OAuth 로그인 및 사용자 정보 조회 | |
+| POST / GET | `/job-postings`, `/job-postings/{id}/analysis-jobs`, `/analysis-jobs/{job_id}` | 채용공고 등록 및 분석 Job 생성/조회 | |
+| POST / GET | `/github/collection-jobs`, `/github/collection-jobs/{job_id}`, `/github/repositories`, `/github/repo-access` | GitHub 저장소 수집 Job 생성/조회, 레포 접근 권한 확인 | |
+| GET / PATCH | `/projects`, `/projects/{project_id}` | 프로젝트 목록 조회 및 수정 | |
+| GET | `/evidences/{evidence_id}` | 추천 근거(출처) 상세 조회 | |
+| POST / GET / PATCH / DELETE | `/cvs`, `/cvs/upload`, `/cvs/sections/{section_id}`, `/cvs/{cv_id}` | PDF 이력서 업로드 및 섹션 관리 | |
+| POST / GET | `/resumes/resume-jobs`, `/resumes/resume-jobs/{job_id}`, `/resumes/resume-results/{resume_result_id}` | 이력서 생성 Job 및 결과 조회 | |
+| 외부 API | LLM API (OpenRouter / OpenAI) | 채용공고·프로젝트 구조화, 임베딩 생성, 이력서 문장 생성 | `backend/app/services/llm_client.py`, `embedding_service.py` |
+| 외부 API | GitHub REST API | OAuth 인증 및 저장소 목록/내용 수집 | `backend/app/services/github_client.py` |
 
 ---
 
 ## 산출물 및 실행 방법
 
-- **산출물 설명:**
-- **실행 환경:**
-- **실행 방법:**
-- **시연 영상 / 이미지:** (선택)
+- **산출물 설명:** 채용공고와 GitHub/PDF 포트폴리오를 LLM으로 분석하여, 지원 직무에 맞는 프로젝트를 추천하고 근거 기반 이력서 문장을 생성해주는 웹 서비스
+- **실행 환경:** Node.js 20+, Python 3.11+, Docker(PostgreSQL + pgvector)
+- **실행 방법:** 아래 [실행 방법](#실행-방법) 참고
+- **시연 영상 / 이미지:** (추후 추가 예정)
 
 ### 실행 방법
 
 ```bash
-# 환경 설정
-cp .env.example .env
+# 0. 데이터베이스 실행 (PostgreSQL + pgvector)
+docker-compose up -d
 
-# 의존성 설치
-npm install   # 또는 pip install -r requirements.txt 등
+# 1. 백엔드 환경 설정 및 실행
+cd backend
+cp .env.example .env   # DATABASE_URL, LLM API 키 등 입력
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+alembic upgrade head
+uvicorn app.main:app --reload   # http://localhost:8000
 
-# 실행
-npm run dev   # 또는 python main.py 등
+# 2. 프론트엔드 환경 설정 및 실행 (새 터미널)
+cd frontend
+# .env.local에 백엔드 API Base URL 등 설정 (예: VITE_API_BASE_URL=http://localhost:8000)
+npm install
+npm run dev   # http://localhost:5173
 ```
+
+> 백엔드/프론트엔드 각각의 상세 실행법은 [`backend/README.md`](backend/README.md), [`frontend/README.md`](frontend/README.md), [`mock api 백엔드 실행법.md`](mock%20api%20백엔드%20실행법.md) 참고.
 
 ### 기술 구성
 
 | 분류 | 사용 기술 |
 |---|---|
-| 핵심 기술 |  |
-| 실행 환경 |  |
-| 데이터 저장 |  |
-| 외부 API / 서비스 |  |
-| 기타 |  |
+| 핵심 기술 | React 19 + TypeScript(Vite), FastAPI(Python), LLM 기반 구조화·매칭·문장 생성 파이프라인 |
+| 실행 환경 | Node.js / npm(frontend), Python venv(backend), Docker Compose |
+| 데이터 저장 | PostgreSQL, pgvector(임베딩 유사도 검색), Alembic 마이그레이션, 로컬 파일 업로드(`backend/uploads`) |
+| 외부 API / 서비스 | GitHub OAuth & REST API, LLM API(OpenRouter/OpenAI 호환), PDF 파싱(pypdf) |
+| 기타 | React Router, MSW(Mock Service Worker, 프론트엔드 목업), oxlint |
 
 ---
 
